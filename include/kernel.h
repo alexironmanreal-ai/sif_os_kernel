@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #define SIF_KERNEL_NAME "SIF Kernel"
-#define SIF_KERNEL_VERSION "0.3.0-fase2"
+#define SIF_KERNEL_VERSION "0.4.0-tasks"
 #define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
 void kernel_main(uint32_t magic, void *mbi);
 void panic(const char *msg);

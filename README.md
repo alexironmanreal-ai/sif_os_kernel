@@ -1,15 +1,19 @@
-# SIF Kernel v0.3 — Fase 1+2
+# SIF Kernel v0.4 — Tasks + Shell
 
-## Fix teclado
-El stub IRQ leía mal el número de IRQ (offset 40 en vez de 36). Corregido: ahora IRQ1 (teclado) funciona.
+## Nuevo
+- Multitasking cooperativo (context switch)
+- Scheduler round-robin + quantum por timer
+- Syscalls `int 0x80` (exit/write/yield/getpid)
+- Shell interactiva
 
-## Fase 2
-- PMM (bitmap de frames)
-- Paging identity map 0-4MiB
-- kmalloc (bump allocator)
+## Comandos shell
+```
+help  ps  mem  ticks  yield  demo  clear  echo hola
+```
 
-## Build (WSL)
+`demo` crea 2 workers que se alternan con yield.
+
+## Build
 ```bash
-git pull
-make clean && make && make run
+git pull && make clean && make && make run
 ```
