@@ -1,28 +1,15 @@
-# SIF Kernel — Base de SO x86 (Fase 1)
+# SIF Kernel v0.3 — Fase 1+2
 
-Kernel **booteable** Multiboot con interrupciones reales.
+## Fix teclado
+El stub IRQ leía mal el número de IRQ (offset 40 en vez de 36). Corregido: ahora IRQ1 (teclado) funciona.
 
-## Incluye (Fase 1)
+## Fase 2
+- PMM (bitmap de frames)
+- Paging identity map 0-4MiB
+- kmalloc (bump allocator)
 
-- PIC 8259 remapeado (IRQ0-15 → int 0x20-0x2F)
-- Stubs IRQ en ASM + dispatch en C
-- PIT timer 100 Hz (IRQ0)
-- Teclado PS/2 (IRQ1) con buffer y eco
-- Serial COM1 (debug)
-- GDT + IDT + VGA printk
-
-## Build (Linux / WSL)
-
+## Build (WSL)
 ```bash
-sudo apt install build-essential gcc-multilib qemu-system-x86
-make clean && make
-make run
+git pull
+make clean && make && make run
 ```
-
-En QEMU: ticks cada ~5s y teclado funcional.
-
-## Windows
-
-Usá **WSL2 Ubuntu** con los mismos comandos.
-
-Repo: https://github.com/alexironmanreal-ai/sif_os_kernel

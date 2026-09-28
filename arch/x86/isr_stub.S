@@ -1,10 +1,11 @@
+/* IRQ stubs — irq number queda en 36(%esp) tras pusha+ds */
 .macro IRQ_STUB num
 .global irq\num
 .type irq\num, @function
 irq\num:
     cli
-    push $0
-    push $\num
+    pushl $0
+    pushl $\num
     jmp irq_common_stub
 .endm
 
@@ -26,7 +27,6 @@ IRQ_STUB 14
 IRQ_STUB 15
 
 .extern irq_dispatch
-
 .global irq_common_stub
 irq_common_stub:
     pusha
@@ -37,16 +37,15 @@ irq_common_stub:
     mov %ax, %es
     mov %ax, %fs
     mov %ax, %gs
-    mov 40(%esp), %eax
-    push %eax
+    movl 36(%esp), %eax
+    pushl %eax
     call irq_dispatch
-    add $4, %esp
+    addl $4, %esp
     pop %eax
     mov %ax, %ds
     mov %ax, %es
     mov %ax, %fs
     mov %ax, %gs
     popa
-    add $8, %esp
-    sti
+    addl $8, %esp
     iret
