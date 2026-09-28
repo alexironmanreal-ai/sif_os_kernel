@@ -1,19 +1,25 @@
-# SIF Kernel v0.4 — Tasks + Shell
+# SIF Kernel v0.5
+
+## Fix consola
+La shell corre **directo** desde `kernel_main` (ya no depende del scheduler).
+Deberias ver banner + `SIF>`.
 
 ## Nuevo
-- Multitasking cooperativo (context switch)
-- Scheduler round-robin + quantum por timer
-- Syscalls `int 0x80` (exit/write/yield/getpid)
-- Shell interactiva
+- ramfs (`ls`, `cat`)
+- ATA PIO detect/read
+- shell siempre visible
 
-## Comandos shell
+## Comandos
 ```
-help  ps  mem  ticks  yield  demo  clear  echo hola
+help ps mem ticks yield demo clear
+echo hola
+ls
+cat readme.txt
+disk
+version
 ```
 
-`demo` crea 2 workers que se alternan con yield.
-
-## Build
+## Run
 ```bash
 git pull && make clean && make && make run
 ```
