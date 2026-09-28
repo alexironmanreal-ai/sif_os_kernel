@@ -6,7 +6,7 @@
 #include <stdbool.h>
 
 #define SIF_KERNEL_NAME    "SIF Kernel"
-#define SIF_KERNEL_VERSION "0.1.0-base"
+#define SIF_KERNEL_VERSION "0.2.0-fase1"
 
 #define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
 
