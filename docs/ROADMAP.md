@@ -1,35 +1,20 @@
-# Roadmap — de kernel base a SO
+# Roadmap
 
-## Fase 0 — Base (actual)
-- [x] Multiboot
-- [x] VGA printk
-- [x] GDT
-- [x] IDT vacía
+## Fase 0
+- [x] Multiboot, VGA, GDT, IDT
 
-## Fase 1 — Hardware básico
-- [ ] PIC remap
-- [ ] IRQ timer (PIT)
-- [ ] IRQ teclado
-- [ ] Serial debug (COM1)
+## Fase 1 (hecha)
+- [x] PIC remap
+- [x] IRQ stubs + dispatch
+- [x] PIT timer
+- [x] Teclado PS/2
+- [x] Serial COM1
 
-## Fase 2 — Memoria
-- [ ] Mapa físico (Multiboot mmap)
-- [ ] Bitmap de frames
-- [ ] Paging (4 KB pages)
-- [ ] kmalloc / kfree
+## Fase 2
+- [ ] Multiboot mmap
+- [ ] Frame allocator
+- [ ] Paging
+- [ ] kmalloc
 
-## Fase 3 — Procesos
-- [ ] PCB
-- [ ] Context switch
-- [ ] Scheduler round-robin
-- [ ] User mode (ring3) + TSS
-
-## Fase 4 — Syscalls + userspace
-- [ ] Syscall table
-- [ ] write/read/exit/fork
-- [ ] Primer proceso init (ELF)
-
-## Fase 5 — Disco + FS
-- [ ] ATA PIO
-- [ ] Filesystem simple
-- [ ] exec()
+## Fase 3+
+- Procesos, syscalls, disco, FS

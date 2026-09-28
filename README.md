@@ -1,50 +1,28 @@
-# SIF Kernel — Base de sistema operativo (x86)
+# SIF Kernel — Base de SO x86 (Fase 1)
 
-Esto **no** es una app de empresa. Es un **kernel mínimo booteable** sobre el que podés construir tu propio SO.
+Kernel **booteable** Multiboot con interrupciones reales.
 
-## Qué incluye
+## Incluye (Fase 1)
 
-- Boot Multiboot (GRUB / QEMU `-kernel`)
-- Entrada `_start` + stack
-- VGA text + `printk`
-- GDT (ring0 code/data)
-- IDT (tabla de 256 entradas, base para IRQs)
+- PIC 8259 remapeado (IRQ0-15 → int 0x20-0x2F)
+- Stubs IRQ en ASM + dispatch en C
+- PIT timer 100 Hz (IRQ0)
+- Teclado PS/2 (IRQ1) con buffer y eco
+- Serial COM1 (debug)
+- GDT + IDT + VGA printk
 
 ## Build (Linux / WSL)
 
 ```bash
 sudo apt install build-essential gcc-multilib qemu-system-x86
-make
-make run    # abre QEMU
+make clean && make
+make run
 ```
+
+En QEMU: ticks cada ~5s y teclado funcional.
 
 ## Windows
 
-Usá **WSL2 (Ubuntu)**:
+Usá **WSL2 Ubuntu** con los mismos comandos.
 
-```bash
-sudo apt update && sudo apt install build-essential gcc-multilib qemu-system-x86
-cd /mnt/c/Users/alex/sif_os_kernel
-make && make run
-```
-
-## Estructura
-
-```
-boot/        Multiboot + entry
-arch/x86/    GDT, IDT
-kernel/      kernel_main
-drivers/     VGA
-lib/         printk
-include/     headers
-```
-
-## Próximos pasos (vos construís arriba)
-
-1. IRQs (timer, teclado)
-2. Paging + kmalloc
-3. Procesos + scheduler
-4. Syscalls + userspace
-5. Disco + filesystem
-
-Ver `docs/ROADMAP.md`.
+Repo: https://github.com/alexironmanreal-ai/sif_os_kernel
