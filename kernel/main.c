@@ -19,6 +19,7 @@
 #include "fs.h"
 #include "rtc.h"
 #include "pci.h"
+#include "userland.h"
 
 extern uint32_t kernel_end;
 
@@ -42,11 +43,11 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     pmm_init(mbi, (uint32_t)&kernel_end);
     paging_init(); kmalloc_init();
     timer_init(100); keyboard_init(); task_init();
-    ata_init(); fs_init(); rtc_init(); pci_init();
+    ata_init(); fs_init(); rtc_init(); pci_init(); userland_init();
     __asm__ volatile ("sti");
     printk("[ok] interrupciones ON\n");
     printk("----------------------------------------\n");
-    printk("help | pci | date | ls | mem | sleep 500\n");
+    printk("help | user | pci | ls | mem\n");
     printk("----------------------------------------\n\n");
     shell_run();
     panic("shell returned");
