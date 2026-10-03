@@ -10,7 +10,7 @@ OBJS:=boot/boot.o arch/x86/gdt_flush.o arch/x86/idt_load.o arch/x86/isr_stub.o a
 all: userspace embed $(KERNEL)
 userspace:
 	$(MAKE) -C userspace
-embed: userspace/bin/hello.elf
+embed: userspace/bin/hello.elf userspace/bin/echo.elf userspace/bin/cat.elf userspace/bin/ls.elf
 	python3 scripts/embed_hello.py
 $(KERNEL): $(OBJS) linker.ld
 	$(LD) $(LDFLAGS) -o $@ $(OBJS)
