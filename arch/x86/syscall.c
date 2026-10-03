@@ -5,12 +5,16 @@
 #include "timer.h"
 #include "rtc.h"
 #include "fs.h"
-
 void syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
     (void)c;
     switch (num) {
-    case SYS_EXIT: task_exit(); break;
-    case SYS_WRITE: if (a) printk("%s", (const char *)a); break;
+    case SYS_EXIT:
+        printk("[sys] EXIT (userspace fin)\n");
+        for (;;) { __asm__ volatile ("sti; hlt"); }
+        break;
+    case SYS_WRITE:
+        if (a) printk("%s", (const char *)a);
+        break;
     case SYS_YIELD: task_yield(); break;
     case SYS_GETPID: {
         struct task *t = task_current();
@@ -18,8 +22,7 @@ void syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
         break;
     }
     case SYS_SLEEP: {
-        uint32_t ticks = a / 10;
-        if (ticks == 0) ticks = 1;
+        uint32_t ticks = a / 10; if (!ticks) ticks = 1;
         uint32_t start = timer_ticks();
         while (timer_ticks() - start < ticks) {
             __asm__ volatile ("hlt");
@@ -41,13 +44,11 @@ void syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
         if (fs_read((const char *)a, tmp, sizeof(tmp) - 1, &sz) == 0) {
             tmp[sz] = 0; printk("%s", tmp);
         }
-        (void)b;
-        break;
+        (void)b; break;
     }
     default: printk("[sys] ? %u\n", num); break;
     }
 }
-
 void syscall_init(void) {
     extern void isr_syscall(void);
     idt_set_gate(0x80, (uint32_t)isr_syscall, 0x08, 0xEE);
