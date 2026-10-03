@@ -21,3 +21,6 @@ void *sbrk(int incr) {
     if (r == cur && incr > 0) return (void *)-1;
     return (void *)cur;
 }
+int getdents(char *buf, unsigned n) {
+    return syscall3(SYS_GETDENTS, (int)buf, (int)n, 0);
+}
