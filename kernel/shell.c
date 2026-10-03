@@ -14,6 +14,7 @@
 #include "pci.h"
 #include "syscall.h"
 #include "io.h"
+#include "userland.h"
 #include <stddef.h>
 #define LINE_MAX 160
 #define HIST_MAX 16
@@ -56,6 +57,7 @@ static int c_info(int a,char **v){(void)a;(void)v;printk("kernel %s %s\nuptime %
 static int c_history(int a,char **v){(void)a;(void)v;int s=hist_count>HIST_MAX?hist_count-HIST_MAX:0;for(int i=s;i<hist_count;i++)printk("%3d %s\n",i,hist[i%HIST_MAX]);return 0;}
 static int c_true(int a,char **v){(void)a;(void)v;return 0;}
 static int c_false(int a,char **v){(void)a;(void)v;return 1;}
+static int c_user(int a,char **v){(void)a;(void)v;userland_run_test();return 0;}
 static void reg(void){
     cmd_init();
     cmd_register("help","lista",c_help);
@@ -88,11 +90,12 @@ static void reg(void){
     cmd_register("panic","crash",c_panic);
     cmd_register("true","0",c_true);
     cmd_register("false","1",c_false);
+    cmd_register("user","entrar ring3",c_user);
 }
 void shell_run(void){
     reg();
     char buf[LINE_MAX]; int pos=0;
-    printk("SIF shell v0.8 - help\nSIF> ");
+    printk("SIF shell v0.9 - help | user\nSIF> ");
     for(;;){
         if(task_needs_resched()){task_clear_resched();task_yield();}
         if(!keyboard_has_input()){__asm__ volatile("hlt");continue;}
