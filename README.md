@@ -1,22 +1,23 @@
-# SIF Kernel v1.1 — userland real
+# SIF Kernel v1.2
 
-## Features
-- Userspace build (`userspace/`) + minimal libc (`printf`, `write`, `exit`)
-- Real ELF32 linked at `0x08000000`
-- stdio FDs: **0=stdin 1=stdout 2=stderr**
-- `exec hello.elf` loads embedded userspace program
-- EXIT returns to shell
+## 7 features this round
+1. Page fault handler (demand-map user + diagnostics)
+2. Kernel pages without USER bit
+3. wait / zombie + kill
+4. Blocking sleep in scheduler
+5. Syscalls: kill, wait, brk/sbrk
+6. stdin in userland (fgets/getchar)
+7. User programs: hello, echo, cat, ls
 
-## Build
 ```bash
-git pull origin main
 make clean && make && make run
 ```
-Needs: gcc-multilib, make, python3, qemu-system-i386
 
-## Test
 ```
-SIF> ls
 SIF> exec hello.elf
-SIF> user
+SIF> exec echo.elf
+SIF> exec cat.elf
+SIF> exec ls.elf
+SIF> kill 2
+SIF> wait
 ```
