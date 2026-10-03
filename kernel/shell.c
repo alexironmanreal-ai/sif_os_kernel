@@ -15,6 +15,7 @@
 #include "syscall.h"
 #include "io.h"
 #include "userland.h"
+#include "vfs.h"
 #include <stddef.h>
 #define LINE_MAX 160
 #define HIST_MAX 16
@@ -28,7 +29,7 @@ static void hist_add(const char *line) {
 }
 static void wa(void){for(int i=0;i<5;i++){printk("[A] %d\n",i);for(volatile int d=0;d<600000;d++){}task_yield();}printk("[A] fin\n");task_exit();}
 static void wb(void){for(int i=0;i<5;i++){printk("[B] %d\n",i);for(volatile int d=0;d<600000;d++){}task_yield();}printk("[B] fin\n");task_exit();}
-static int c_help(int a,char **v){(void)a;(void)v;printk("\n=== SIF Shell ===\n");cmd_list();printk("\n");return 0;}
+static int c_help(int a,char **v){(void)a;(void)v;printk("\n=== SIF Shell v1.0 ===\n");cmd_list();printk("\n");return 0;}
 static int c_version(int a,char **v){(void)a;(void)v;printk("%s %s\n",SIF_KERNEL_NAME,SIF_KERNEL_VERSION);return 0;}
 static int c_clear(int a,char **v){(void)a;(void)v;vga_clear();return 0;}
 static int c_echo(int a,char **v){for(int i=1;i<a;i++){if(i>1)printk(" ");printk("%s",v[i]);}printk("\n");return 0;}
@@ -41,7 +42,7 @@ static int c_date(int a,char **v){(void)a;(void)v;rtc_print();return 0;}
 static int c_yield(int a,char **v){(void)a;(void)v;task_yield();return 0;}
 static int c_demo(int a,char **v){(void)a;(void)v;task_create("workerA",wa);task_create("workerB",wb);printk("workers OK\n");return 0;}
 static int c_ls(int a,char **v){(void)a;(void)v;fs_list();return 0;}
-static int c_cat(int a,char **v){if(a<2){printk("uso: cat ARCHIVO\n");return -1;}char b[512];uint32_t sz=0;if(fs_read(v[1],b,sizeof(b)-1,&sz)<0){printk("no existe\n");return -1;}b[sz]=0;printk("%s",b);if(sz&&b[sz-1]!='\n')printk("\n");return 0;}
+static int c_cat(int a,char **v){if(a<2){printk("uso: cat A\n");return -1;}char b[512];uint32_t sz=0;if(fs_read(v[1],b,sizeof(b)-1,&sz)<0){printk("no existe\n");return -1;}b[sz]=0;printk("%s",b);if(sz&&b[sz-1]!='\n')printk("\n");return 0;}
 static int c_touch(int a,char **v){if(a<2){printk("uso: touch A\n");return -1;}if(fs_create(v[1],"",0)<0){printk("error\n");return -1;}printk("ok\n");return 0;}
 static int c_write(int a,char **v){if(a<3){printk("uso: write A texto\n");return -1;}char body[256];int pos=0;for(int i=2;i<a&&pos<255;i++){if(i>2)body[pos++]=' ';for(char *p=v[i];*p&&pos<255;p++)body[pos++]=*p;}body[pos]=0;if(fs_write(v[1],body,(uint32_t)pos)<0){printk("error\n");return -1;}printk("ok\n");return 0;}
 static int c_rm(int a,char **v){if(a<2){printk("uso: rm A\n");return -1;}if(fs_delete(v[1])<0){printk("no existe\n");return -1;}printk("borrado\n");return 0;}
@@ -58,6 +59,9 @@ static int c_history(int a,char **v){(void)a;(void)v;int s=hist_count>HIST_MAX?h
 static int c_true(int a,char **v){(void)a;(void)v;return 0;}
 static int c_false(int a,char **v){(void)a;(void)v;return 1;}
 static int c_user(int a,char **v){(void)a;(void)v;userland_run_test();return 0;}
+static int c_exec(int a,char **v){if(a<2){printk("uso: exec FILE.elf\n");return -1;}return userland_exec_file(v[1]);}
+static int c_open(int a,char **v){if(a<2){printk("uso: open FILE\n");return -1;}int fd=vfs_open(v[1],0);printk("fd=%d\n",fd);return fd<0?-1:0;}
+static int c_fdread(int a,char **v){if(a<2){printk("uso: fdread FD\n");return -1;}int fd=0;for(char *p=v[1];*p>='0'&&*p<='9';p++)fd=fd*10+(*p-'0');char buf[128];int n=vfs_read(fd,buf,sizeof(buf)-1);if(n<0){printk("error\n");return -1;}buf[n]=0;printk("%s",buf);if(n&&buf[n-1]!='\n')printk("\n");return 0;}
 static void reg(void){
     cmd_init();
     cmd_register("help","lista",c_help);
@@ -90,12 +94,15 @@ static void reg(void){
     cmd_register("panic","crash",c_panic);
     cmd_register("true","0",c_true);
     cmd_register("false","1",c_false);
-    cmd_register("user","entrar ring3",c_user);
+    cmd_register("user","ring3 test",c_user);
+    cmd_register("exec","ELF userspace",c_exec);
+    cmd_register("open","abrir fd",c_open);
+    cmd_register("fdread","leer fd",c_fdread);
 }
 void shell_run(void){
     reg();
     char buf[LINE_MAX]; int pos=0;
-    printk("SIF shell v0.9 - help | user\nSIF> ");
+    printk("SIF shell v1.0 - help | user | exec\nSIF> ");
     for(;;){
         if(task_needs_resched()){task_clear_resched();task_yield();}
         if(!keyboard_has_input()){__asm__ volatile("hlt");continue;}
