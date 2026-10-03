@@ -4,7 +4,7 @@
 #include <stddef.h>
 #define FS_MAX_FILES 32
 #define FS_NAME_LEN 32
-#define FS_MAX_SIZE 8192
+#define FS_MAX_SIZE 16384
 void fs_init(void);
 int fs_create(const char *name, const void *data, uint32_t size);
 int fs_write(const char *name, const void *data, uint32_t size);
