@@ -13,6 +13,7 @@
 #define SYS_KILL 10
 #define SYS_WAIT 11
 #define SYS_BRK 12
+#define SYS_GETDENTS 13
 void syscall_init(void);
 uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c);
 void sys_write(const char *s);

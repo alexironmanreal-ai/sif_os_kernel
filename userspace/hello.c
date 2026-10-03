@@ -1,11 +1,11 @@
 #include "stdio.h"
 #include "unistd.h"
-int main(void) {
+int main(int argc, char **argv) {
     printf("=== SIF userspace hello ===\n");
-    printf("stdio fds: stdout=1 stderr=2\n");
-    write(STDOUT_FILENO, "raw write stdout\n", 16);
-    write(STDERR_FILENO, "raw write stderr\n", 16);
-    printf("number %d hex %x\n", 42, 0xabc);
-    printf("done — exit(0)\n");
+    printf("argc=%d pid=%d\n", argc, getpid());
+    for (int i = 0; i < argc; i++)
+        printf("  argv[%d]=%s\n", i, argv[i] ? argv[i] : "(null)");
+    write(STDOUT_FILENO, "raw stdout\n", 11);
+    printf("done\n");
     return 0;
 }

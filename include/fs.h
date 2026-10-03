@@ -12,5 +12,6 @@ int fs_read(const char *name, void *buf, uint32_t max, uint32_t *out_size);
 int fs_delete(const char *name);
 int fs_list(void);
 int fs_exists(const char *name);
+int fs_getdents(char *buf, uint32_t max);
 int fs_append(const char *name, const void *data, uint32_t size);
 #endif

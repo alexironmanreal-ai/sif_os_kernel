@@ -12,6 +12,7 @@
 #define SYS_KILL 10
 #define SYS_WAIT 11
 #define SYS_BRK 12
+#define SYS_GETDENTS 13
 #define STDIN_FILENO 0
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
@@ -26,4 +27,5 @@ int getpid(void);
 void sleep_ms(unsigned ms);
 int kill(int pid);
 void *sbrk(int incr);
+int getdents(char *buf, unsigned n);
 #endif
