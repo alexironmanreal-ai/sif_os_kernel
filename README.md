@@ -1,11 +1,19 @@
-# SIF Kernel v0.6
+# SIF Kernel v0.7
 
-## Avances
-1. Excepciones CPU 0-31
-2. Heap freelist (kmalloc/kfree)
-3. RTC CMOS (date/time)
-4. ramfs v2 (write/rm/touch)
+## 4 avances
+1. **GDT ring3 + TSS** — base userspace
+2. **PCI scan** — comando `pci`
+3. **Syscalls** — sleep/time/open/read (DPL3)
+4. **Shell** — sleep, hexdump, reboot, uptime, pci
 
 ```bash
-make clean && make && make run
+git pull && make clean && make && make run
+```
+
+```
+pci
+sleep 500
+hexdump readme.txt
+uptime
+reboot
 ```
