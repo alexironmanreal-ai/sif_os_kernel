@@ -1,10 +1,12 @@
-# SIF Kernel v0.9 — userspace ring3
+# SIF Kernel v1.0
 
-## Nuevo
-- `enter_usermode` (iret a CS=0x1B SS=0x23)
-- paginas USER en 0x08000000
-- programa de prueba con `int 0x80` (write, sleep, exit)
-- comando shell: **`user`**
+## Hoy se avanzó
+- EXIT userspace → vuelve a shell
+- Loader ELF32 i386
+- VFS + file descriptors (open/read/write/close)
+- Syscalls con retorno en EAX
+- `exec hello.elf`, `open`, `fdread`
+- Target `make iso`
 
 ```bash
 git pull origin main
@@ -13,7 +15,8 @@ make clean && make && make run
 
 ```
 SIF> user
-[ring3] hola desde userspace!
-[ring3] volvi de sleep, exit
-[sys] EXIT (userspace fin)
+SIF> ls
+SIF> exec hello.elf
+SIF> open readme.txt
+SIF> fdread 0
 ```
