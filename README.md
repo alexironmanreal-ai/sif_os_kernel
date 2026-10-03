@@ -1,22 +1,22 @@
-# SIF Kernel v1.0
+# SIF Kernel v1.1 — userland real
 
-## Hoy se avanzó
-- EXIT userspace → vuelve a shell
-- Loader ELF32 i386
-- VFS + file descriptors (open/read/write/close)
-- Syscalls con retorno en EAX
-- `exec hello.elf`, `open`, `fdread`
-- Target `make iso`
+## Features
+- Userspace build (`userspace/`) + minimal libc (`printf`, `write`, `exit`)
+- Real ELF32 linked at `0x08000000`
+- stdio FDs: **0=stdin 1=stdout 2=stderr**
+- `exec hello.elf` loads embedded userspace program
+- EXIT returns to shell
 
+## Build
 ```bash
 git pull origin main
 make clean && make && make run
 ```
+Needs: gcc-multilib, make, python3, qemu-system-i386
 
+## Test
 ```
-SIF> user
 SIF> ls
 SIF> exec hello.elf
-SIF> open readme.txt
-SIF> fdread 0
+SIF> user
 ```
