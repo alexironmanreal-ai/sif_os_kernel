@@ -16,19 +16,28 @@
 - [x] Paging (identity map + dynamic tables)
 - [x] kmalloc freelist + kfree
 
-## Fase 3 — Procesos y FS (en curso)
+## Fase 3 — Procesos y FS (hecha)
 - [x] Scheduler cooperativo + round-robin
 - [x] Context switch
-- [x] Syscalls basicas
+- [x] Syscalls basicas (+ getdents)
 - [x] ramfs (create/read/delete/list)
 - [x] ATA PIO detect/read
 - [x] Shell interactiva
+- [x] ELF loader + userspace programs
+- [x] VFS layer basica (stdin/stdout/fd)
 
-## Fase 4 — Siguiente
-- [ ] Paginacion por proceso / user mode
-- [ ] ELF loader
-- [ ] Syscalls completas (read/write/open/exit)
-- [ ] Filesystem en disco (simple FAT o propio)
-- [ ] VFS layer
-- [ ] Preemptive scheduling mejorado
-- [ ] Mutex / sleep / wait queues
+## Fase 4 — Estructura de procesos (en curso)
+- [x] Page directory por proceso (clone kernel + user region privada)
+- [x] Switch CR3 en schedule
+- [x] exec crea address space + libera al salir
+- [x] task slots con cr3 / is_user / parent / kstack
+- [ ] exec asincrono (proceso corre como task real, shell no bloquea)
+- [ ] Context switch completo ring3 (frames de interrupcion)
+- [ ] Per-process brk / file descriptor table
+- [ ] Filesystem en disco (FAT simple o propio)
+- [ ] Preemptive scheduling robusto + mutex / wait queues
+
+## Fase 5 — Apps y GUI (despues)
+- [ ] Mas programas userspace (editor, calculator, ...)
+- [ ] Framebuffer / modo grafico basico
+- [ ] Window manager minimo / GUI toolkit
