@@ -12,13 +12,14 @@ userspace:
 	$(MAKE) -C userspace
 embed: userspace/bin/hello.elf userspace/bin/echo.elf userspace/bin/cat.elf userspace/bin/ls.elf
 	python3 scripts/embed_hello.py
-$(KERNEL): $(OBJS) linker.ld
+$(KERNEL): $(OBJS) linker.ld include/user_elfs.h
 	$(LD) $(LDFLAGS) -o $@ $(OBJS)
 	@echo Built $@
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 %.o: %.S
 	$(AS) $(ASFLAGS) -c $< -o $@
+kernel/fs.o: include/user_elfs.h
 clean:
 	$(MAKE) -C userspace clean
 	rm -f $(OBJS) $(KERNEL) sif.iso
