@@ -5,8 +5,9 @@ CFLAGS:=-m32 -std=c11 -ffreestanding -fno-builtin -fno-stack-protector -fno-pic 
 ASFLAGS:=-m32
 LDFLAGS:=-m elf_i386 -T linker.ld -nostdlib
 KERNEL:=sif_kernel.elf
-OBJS:=boot/boot.o arch/x86/gdt_flush.o arch/x86/idt_load.o arch/x86/isr_stub.o arch/x86/isr_ex_stub.o arch/x86/switch.o arch/x86/syscall_stub.o arch/x86/enter_user.o arch/x86/gdt.o arch/x86/idt.o arch/x86/pic.o arch/x86/irq.o arch/x86/isr.o arch/x86/syscall.o drivers/vga.o drivers/serial.o drivers/timer.o drivers/keyboard.o drivers/ata.o drivers/pci.o drivers/rtc.o mm/pmm.o mm/paging.o mm/kmalloc.o lib/printk.o lib/string.o kernel/main.o kernel/task.o kernel/cmd.o kernel/shell.o kernel/fs.o kernel/userland.o kernel/elf.o kernel/vfs.o kernel/sync.o
-.PHONY: all clean run iso userspace embed
+DISK:=disk.img
+OBJS:=boot/boot.o arch/x86/gdt_flush.o arch/x86/idt_load.o arch/x86/isr_stub.o arch/x86/isr_ex_stub.o arch/x86/switch.o arch/x86/syscall_stub.o arch/x86/enter_user.o arch/x86/gdt.o arch/x86/idt.o arch/x86/pic.o arch/x86/irq.o arch/x86/isr.o arch/x86/syscall.o drivers/vga.o drivers/serial.o drivers/timer.o drivers/keyboard.o drivers/ata.o drivers/pci.o drivers/rtc.o mm/pmm.o mm/paging.o mm/kmalloc.o lib/printk.o lib/string.o kernel/main.o kernel/task.o kernel/cmd.o kernel/shell.o kernel/fs.o kernel/diskfs.o kernel/userland.o kernel/elf.o kernel/vfs.o kernel/sync.o
+.PHONY: all clean run iso userspace embed disk
 all: userspace embed $(KERNEL)
 userspace:
 	$(MAKE) -C userspace
@@ -20,12 +21,16 @@ $(KERNEL): $(OBJS) linker.ld include/user_elfs.h
 %.o: %.S
 	$(AS) $(ASFLAGS) -c $< -o $@
 kernel/fs.o: include/user_elfs.h
+disk:
+	@test -f $(DISK) || (dd if=/dev/zero of=$(DISK) bs=1M count=32 status=none && echo "created $(DISK)")
 clean:
 	$(MAKE) -C userspace clean
 	rm -f $(OBJS) $(KERNEL) sif.iso
 	rm -rf iso_tmp
-run: $(KERNEL)
-	qemu-system-i386 -kernel $(KERNEL) -serial stdio -m 64M -no-reboot -no-shutdown
+run: $(KERNEL) disk
+	qemu-system-i386 -kernel $(KERNEL) -serial stdio -m 64M \
+		-drive file=$(DISK),format=raw,if=ide \
+		-no-reboot -no-shutdown
 iso: $(KERNEL)
 	mkdir -p iso_tmp/boot/grub
 	cp $(KERNEL) iso_tmp/boot/sif_kernel.elf

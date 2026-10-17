@@ -7,6 +7,7 @@
 #include "timer.h"
 #include "vga.h"
 #include "fs.h"
+#include "diskfs.h"
 #include "ata.h"
 #include "rtc.h"
 #include "kmalloc.h"
@@ -46,7 +47,6 @@ static void wa(void) {
     printk("[A] fin\n");
     task_exit();
 }
-
 static void wb(void) {
     for (int i = 0; i < 5; i++) {
         printk("[B] %d\n", i);
@@ -61,26 +61,23 @@ static void wb(void) {
 static int c_help(int a, char **v) {
     (void)a;
     (void)v;
-    printk("\n=== SIF Shell v1.0 ===\n");
+    printk("\n=== SIF Shell ===\n");
     cmd_list();
     printk("\n");
     return 0;
 }
-
 static int c_version(int a, char **v) {
     (void)a;
     (void)v;
     printk("%s %s\n", SIF_KERNEL_NAME, SIF_KERNEL_VERSION);
     return 0;
 }
-
 static int c_clear(int a, char **v) {
     (void)a;
     (void)v;
     vga_clear();
     return 0;
 }
-
 static int c_echo(int a, char **v) {
     for (int i = 1; i < a; i++) {
         if (i > 1)
@@ -90,14 +87,12 @@ static int c_echo(int a, char **v) {
     printk("\n");
     return 0;
 }
-
 static int c_ps(int a, char **v) {
     (void)a;
     (void)v;
     task_list();
     return 0;
 }
-
 static int c_mem(int a, char **v) {
     (void)a;
     (void)v;
@@ -108,20 +103,17 @@ static int c_mem(int a, char **v) {
     printk("HEAP used=%u free=%u blocks=%u\n", u, f, b);
     return 0;
 }
-
 static int c_free(int a, char **v) {
     (void)a;
     (void)v;
     return c_mem(0, 0);
 }
-
 static int c_ticks(int a, char **v) {
     (void)a;
     (void)v;
     printk("ticks=%u\n", timer_ticks());
     return 0;
 }
-
 static int c_uptime(int a, char **v) {
     (void)a;
     (void)v;
@@ -129,21 +121,18 @@ static int c_uptime(int a, char **v) {
     printk("up %u min %u sec\n", s / 60, s % 60);
     return 0;
 }
-
 static int c_date(int a, char **v) {
     (void)a;
     (void)v;
     rtc_print();
     return 0;
 }
-
 static int c_yield(int a, char **v) {
     (void)a;
     (void)v;
     task_yield();
     return 0;
 }
-
 static int c_demo(int a, char **v) {
     (void)a;
     (void)v;
@@ -152,14 +141,12 @@ static int c_demo(int a, char **v) {
     printk("workers OK\n");
     return 0;
 }
-
 static int c_ls(int a, char **v) {
     (void)a;
     (void)v;
     fs_list();
     return 0;
 }
-
 static int c_cat(int a, char **v) {
     if (a < 2) {
         printk("uso: cat A\n");
@@ -177,7 +164,6 @@ static int c_cat(int a, char **v) {
         printk("\n");
     return 0;
 }
-
 static int c_touch(int a, char **v) {
     if (a < 2) {
         printk("uso: touch A\n");
@@ -190,7 +176,6 @@ static int c_touch(int a, char **v) {
     printk("ok\n");
     return 0;
 }
-
 static int c_write(int a, char **v) {
     if (a < 3) {
         printk("uso: write A texto\n");
@@ -212,7 +197,6 @@ static int c_write(int a, char **v) {
     printk("ok\n");
     return 0;
 }
-
 static int c_rm(int a, char **v) {
     if (a < 2) {
         printk("uso: rm A\n");
@@ -225,7 +209,6 @@ static int c_rm(int a, char **v) {
     printk("borrado\n");
     return 0;
 }
-
 static int c_disk(int a, char **v) {
     (void)a;
     (void)v;
@@ -234,17 +217,16 @@ static int c_disk(int a, char **v) {
     else {
         uint8_t s[512];
         printk(ata_read_sectors(0, 1, s) == 0 ? "ATA OK\n" : "ATA err\n");
+        printk("SFS: %s\n", diskfs_mounted() ? "mounted" : "not mounted");
     }
     return 0;
 }
-
 static int c_pci(int a, char **v) {
     (void)a;
     (void)v;
     pci_list();
     return 0;
 }
-
 static int c_sleep(int a, char **v) {
     uint32_t ms = 1000;
     if (a >= 2) {
@@ -259,7 +241,6 @@ static int c_sleep(int a, char **v) {
     printk("wake\n");
     return 0;
 }
-
 static int c_hexdump(int a, char **v) {
     if (a < 2) {
         printk("uso: hexdump A\n");
@@ -282,7 +263,6 @@ static int c_hexdump(int a, char **v) {
     }
     return 0;
 }
-
 static int c_reboot(int a, char **v) {
     (void)a;
     (void)v;
@@ -295,37 +275,32 @@ static int c_reboot(int a, char **v) {
         __asm__ volatile("hlt");
     return 0;
 }
-
 static int c_panic(int a, char **v) {
     (void)a;
     (void)v;
     __asm__ volatile("int $0");
     return 0;
 }
-
 static int c_uname(int a, char **v) {
     (void)a;
     (void)v;
     printk("%s %s i386\n", SIF_KERNEL_NAME, SIF_KERNEL_VERSION);
     return 0;
 }
-
 static int c_whoami(int a, char **v) {
     (void)a;
     (void)v;
     printk("root\n");
     return 0;
 }
-
 static int c_info(int a, char **v) {
     (void)a;
     (void)v;
-    printk("kernel %s %s\nuptime %u\npci %d\nata %s\n", SIF_KERNEL_NAME,
+    printk("kernel %s %s\nuptime %u\npci %d\nata %s\nsfs %s\n", SIF_KERNEL_NAME,
            SIF_KERNEL_VERSION, timer_seconds(), pci_count(),
-           ata_present() ? "yes" : "no");
+           ata_present() ? "yes" : "no", diskfs_mounted() ? "yes" : "no");
     return 0;
 }
-
 static int c_history(int a, char **v) {
     (void)a;
     (void)v;
@@ -334,27 +309,22 @@ static int c_history(int a, char **v) {
         printk("%3d %s\n", i, hist[i % HIST_MAX]);
     return 0;
 }
-
 static int c_true(int a, char **v) {
     (void)a;
     (void)v;
     return 0;
 }
-
 static int c_false(int a, char **v) {
     (void)a;
     (void)v;
     return 1;
 }
-
 static int c_user(int a, char **v) {
     (void)a;
     (void)v;
     userland_run_test();
     return 0;
 }
-
-/* exec FILE [arg1 arg2 ...] — passes full argv to userspace */
 static int c_exec(int a, char **v) {
     if (a < 2) {
         printk("uso: exec FILE.elf [args...]\n");
@@ -362,7 +332,6 @@ static int c_exec(int a, char **v) {
     }
     return userland_exec_file_argv(v[1], a - 1, &v[1]);
 }
-
 static int c_open(int a, char **v) {
     if (a < 2) {
         printk("uso: open FILE\n");
@@ -372,7 +341,6 @@ static int c_open(int a, char **v) {
     printk("fd=%d\n", fd);
     return fd < 0 ? -1 : 0;
 }
-
 static int c_fdread(int a, char **v) {
     if (a < 2) {
         printk("uso: fdread FD\n");
@@ -394,6 +362,83 @@ static int c_fdread(int a, char **v) {
     return 0;
 }
 
+/* ---- disk FS commands ---- */
+static int c_mkfs(int a, char **v) {
+    (void)a;
+    (void)v;
+    return diskfs_format();
+}
+static int c_mount(int a, char **v) {
+    (void)a;
+    (void)v;
+    if (diskfs_mount() == 0) {
+        printk("mounted\n");
+        return 0;
+    }
+    printk("mount fail\n");
+    return -1;
+}
+static int c_sync(int a, char **v) {
+    (void)a;
+    (void)v;
+    return diskfs_sync();
+}
+static int c_dls(int a, char **v) {
+    (void)a;
+    (void)v;
+    return diskfs_list();
+}
+static int c_dcat(int a, char **v) {
+    if (a < 2) {
+        printk("uso: dcat NAME\n");
+        return -1;
+    }
+    char b[512];
+    uint32_t sz = 0;
+    if (diskfs_read(v[1], b, sizeof(b) - 1, &sz) < 0) {
+        printk("no existe en disco\n");
+        return -1;
+    }
+    b[sz] = 0;
+    printk("%s", b);
+    if (sz && b[sz - 1] != '\n')
+        printk("\n");
+    return 0;
+}
+static int c_dwrite(int a, char **v) {
+    if (a < 3) {
+        printk("uso: dwrite NAME texto...\n");
+        return -1;
+    }
+    char body[256];
+    int pos = 0;
+    for (int i = 2; i < a && pos < 255; i++) {
+        if (i > 2)
+            body[pos++] = ' ';
+        for (char *p = v[i]; *p && pos < 255; p++)
+            body[pos++] = *p;
+    }
+    body[pos] = 0;
+    if (diskfs_write(v[1], body, (uint32_t)pos) < 0) {
+        printk("error\n");
+        return -1;
+    }
+    printk("ok (disco)\n");
+    return 0;
+}
+static int c_drm(int a, char **v) {
+    if (a < 2) {
+        printk("uso: drm NAME\n");
+        return -1;
+    }
+    if (diskfs_delete(v[1]) < 0) {
+        printk("no existe\n");
+        return -1;
+    }
+    printk("borrado disco\n");
+    return 0;
+}
+
 static void reg(void) {
     cmd_init();
     cmd_register("help", "lista", c_help);
@@ -412,12 +457,19 @@ static void reg(void) {
     cmd_register("time", "RTC", c_date);
     cmd_register("yield", "yield", c_yield);
     cmd_register("demo", "workers", c_demo);
-    cmd_register("ls", "listar", c_ls);
-    cmd_register("cat", "leer", c_cat);
-    cmd_register("touch", "crear", c_touch);
-    cmd_register("write", "escribir", c_write);
-    cmd_register("rm", "borrar", c_rm);
-    cmd_register("disk", "ATA", c_disk);
+    cmd_register("ls", "ramfs", c_ls);
+    cmd_register("cat", "leer ramfs", c_cat);
+    cmd_register("touch", "crear ramfs", c_touch);
+    cmd_register("write", "escribir ramfs", c_write);
+    cmd_register("rm", "borrar ramfs", c_rm);
+    cmd_register("disk", "ATA/SFS", c_disk);
+    cmd_register("mkfs", "formatear SFS", c_mkfs);
+    cmd_register("mount", "montar SFS", c_mount);
+    cmd_register("sync", "sync SFS", c_sync);
+    cmd_register("dls", "listar disco", c_dls);
+    cmd_register("dcat", "leer disco", c_dcat);
+    cmd_register("dwrite", "escribir disco", c_dwrite);
+    cmd_register("drm", "borrar disco", c_drm);
     cmd_register("pci", "PCI", c_pci);
     cmd_register("sleep", "ms", c_sleep);
     cmd_register("hexdump", "hex", c_hexdump);
@@ -436,7 +488,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF shell v1.0 - help | user | exec\nSIF> ");
+    printk("SIF shell - help | mkfs | dls | exec\nSIF> ");
     for (;;) {
         if (task_needs_resched()) {
             task_clear_resched();
