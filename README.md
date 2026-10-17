@@ -1,23 +1,17 @@
-# SIF Kernel v1.7.1
+# SIF Kernel v1.8.0-async
 
-## GUI (arreglado)
+## Exec asincrono
+```
+SIF> exec hello.elf          # lanza y vuelve al prompt
+SIF> ps                      # ves el proceso user
+SIF> wait                    # espera a que termine
+SIF> run hello.elf           # spawn + wait (sincrono)
+```
+
 ```bash
-git pull origin main
+git fetch origin
+git reset --hard origin/main
 make clean && make && make run
 ```
 
-```
-SIF> gui
-```
-
-Deberias ver escritorio azul 320x200. Si la ventana de QEMU queda negra, mira el **serial** (terminal):
-```
-[gfx] mode13 begin
-[gfx] mode13 ok
-[gui] desktop drawn
-```
-
-Teclas: `1` `2` `3` paneles · `ESC` o `q` salir
-
-## Nota QEMU
-Usa la ventana grafica de QEMU (no solo -nographic). El Makefile ya abre VGA normal.
+Version al boot: **1.8.0-async**

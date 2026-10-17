@@ -7,6 +7,7 @@
 #include "gdt.h"
 
 extern void context_switch(struct cpu_context *old, struct cpu_context *new);
+extern void enter_usermode(uint32_t eip, uint32_t esp);
 
 static struct task tasks[MAX_TASKS];
 static int current_id = -1;
@@ -16,7 +17,9 @@ static int quantum_left = 0;
 #define QUANTUM 5
 
 #define USER_BRK_START 0x08100000u
-#define USER_BRK_MAX   0x08F00000u
+
+/* Forward: kernel stub that enters ring3 for user tasks */
+static void user_trampoline(void);
 
 static void idle_task(void) {
     for (;;) {
@@ -26,6 +29,20 @@ static void idle_task(void) {
             schedule();
         }
     }
+}
+
+static void user_trampoline(void) {
+    struct task *t = task_current();
+    if (!t || !t->is_user || !t->user_eip) {
+        printk("[task] bad user trampoline\n");
+        task_exit_code(-1);
+    }
+    if (t->kstack_top)
+        tss_set_kernel_stack(t->kstack_top);
+    if (t->cr3)
+        paging_switch(t->cr3);
+    enter_usermode(t->user_eip, t->user_esp);
+    task_exit_code(-1);
 }
 
 void task_init_stdio(struct task *t) {
@@ -102,7 +119,7 @@ void task_init(void) {
     quantum_left = QUANTUM;
     task_count = 0;
     task_create("idle", idle_task);
-    printk("[task] scheduler + per-process FD/brk\n");
+    printk("[task] scheduler + async user tasks\n");
 }
 
 int task_create(const char *name, void (*entry)(void)) {
@@ -153,7 +170,8 @@ int task_create(const char *name, void (*entry)(void)) {
 
 int task_create_user(const char *name, uint32_t cr3, uint32_t entry,
                      uint32_t user_esp) {
-    int id = task_create(name, 0);
+    /* kernel entry = trampoline; ring3 eip/esp stored on task */
+    int id = task_create(name, user_trampoline);
     if (id < 0)
         return -1;
     struct task *t = &tasks[id];
@@ -196,9 +214,14 @@ void task_exit_code(int code) {
             paging_destroy_address_space(doomed);
         }
 
-        int p = t->wait_parent;
-        if (p >= 0 && tasks[p].state == TASK_BLOCKED)
+        int p = t->parent;
+        if (p >= 0 && p < MAX_TASKS && tasks[p].state == TASK_BLOCKED)
             tasks[p].state = TASK_READY;
+
+        if (t->wait_parent >= 0 && t->wait_parent < MAX_TASKS &&
+            tasks[t->wait_parent].state == TASK_BLOCKED)
+            tasks[t->wait_parent].state = TASK_READY;
+
         for (int i = 0; i < MAX_TASKS; i++) {
             if (tasks[i].state == TASK_BLOCKED &&
                 (tasks[i].waiting_on == current_id || tasks[i].waiting_on == -1))
@@ -257,6 +280,10 @@ int task_kill(int pid) {
             (tasks[i].waiting_on == pid || tasks[i].waiting_on == -1))
             tasks[i].state = TASK_READY;
     }
+    int p = tasks[pid].parent;
+    if (p >= 0 && p < MAX_TASKS && tasks[p].state == TASK_BLOCKED)
+        tasks[p].state = TASK_READY;
+
     if (pid == current_id)
         schedule();
     return 0;
@@ -272,8 +299,20 @@ int task_wait(int pid, int *status) {
                 continue;
             if (pid >= 0 && i != pid)
                 continue;
+            /* prefer our children */
+            if (pid < 0 && tasks[i].parent != current_id && tasks[i].parent >= 0)
+                continue;
             found = i;
             break;
+        }
+        /* if strict child filter found nothing, accept any zombie when pid<0 */
+        if (found < 0 && pid < 0) {
+            for (int i = 0; i < MAX_TASKS; i++) {
+                if (tasks[i].state == TASK_ZOMBIE) {
+                    found = i;
+                    break;
+                }
+            }
         }
         if (found >= 0) {
             if (status)

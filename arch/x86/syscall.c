@@ -20,7 +20,7 @@ uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
         printk("\n[sys] EXIT %u\n", a);
         {
             struct task *t = task_current();
-            if (t && t->is_user)
+            if (t)
                 task_exit_code((int)a);
             else
                 userland_do_exit();
@@ -74,10 +74,8 @@ uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
     }
 
     case SYS_BRK: {
-        /* per-process heap break */
         struct task *t = task_current();
         if (!t || !t->is_user) {
-            /* fallback for non-user context */
             static uint32_t g_brk = USER_BRK_START;
             static uint32_t g_mapped = USER_BRK_START;
             if (a == 0)
@@ -127,7 +125,7 @@ uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
 void syscall_init(void) {
     extern void isr_syscall(void);
     idt_set_gate(0x80, (uint32_t)isr_syscall, 0x08, 0xEE);
-    printk("[sys] int 0x80 + per-proc brk/fd\n");
+    printk("[sys] int 0x80 async-ready\n");
 }
 
 void sys_write(const char *s) {

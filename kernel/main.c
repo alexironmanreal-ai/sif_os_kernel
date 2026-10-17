@@ -70,8 +70,16 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     __asm__ volatile("sti");
     printk("[ok] interrupciones ON\n");
     printk("----------------------------------------\n");
-    printk("help | mkfs | dls | exec hello.elf\n");
+    printk("exec=async  run=sync  wait  gui\n");
     printk("----------------------------------------\n\n");
-    shell_run();
-    panic("shell returned");
+
+    /* Shell as a real task so wait/spawn work */
+    if (task_create("shell", shell_task) < 0)
+        panic("no shell task");
+
+    /* Enter scheduler — never returns to here */
+    for (;;) {
+        schedule();
+        __asm__ volatile("sti; hlt");
+    }
 }
