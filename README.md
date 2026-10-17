@@ -1,15 +1,14 @@
-# SIF Kernel v1.4
+# SIF Kernel v1.5
 
-## Nuevo (v1.4.0-proc)
-- **Address space por proceso**: cada `exec` crea un page directory propio
-- Kernel mappings compartidos, region user (0x08000000–0x09000000) privada
-- Al salir se libera el address space (frames + page tables)
-- Tasks con `cr3`, `is_user`, `parent`, `kstack` — base para procesos reales
-- `ps` muestra CR3 y si es user/kernel
+## Nuevo (v1.5.0-fd)
+- **Tabla de FDs por proceso**: cada proceso user tiene sus propios 0/1/2 + opens
+- **brk por proceso**: el heap (`sbrk`) ya no es global
+- **mutex** cooperativo con cola de espera (`include/sync.h`)
+- Al salir se cierran FDs y se libera el address space
+- `ps` muestra tambien el BRK del proceso
 
-## Anterior
-- SYS_GETDENTS + `ls.elf`
-- argv en userspace, exit limpio, `exec FILE args...`
+## Anterior (v1.4)
+- Address space por proceso, CR3 switch, getdents, argv, exec con args
 
 ```bash
 git pull origin main
@@ -18,8 +17,7 @@ make clean && make && make run
 
 ```
 SIF> exec hello.elf
-SIF> exec echo.elf hola mundo
+SIF> exec cat.elf readme.txt
 SIF> exec ls.elf
 SIF> ps
-SIF> user
 ```

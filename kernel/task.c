@@ -15,6 +15,9 @@ static int need_resched = 0;
 static int quantum_left = 0;
 #define QUANTUM 5
 
+#define USER_BRK_START 0x08100000u
+#define USER_BRK_MAX   0x08F00000u
+
 static void idle_task(void) {
     for (;;) {
         __asm__ volatile("sti; hlt");
@@ -23,6 +26,49 @@ static void idle_task(void) {
             schedule();
         }
     }
+}
+
+void task_init_stdio(struct task *t) {
+    if (!t)
+        return;
+    for (int i = 0; i < PROC_MAX_FD; i++) {
+        t->fds[i].used = 0;
+        t->fds[i].name[0] = 0;
+        t->fds[i].offset = 0;
+        t->fds[i].kind = 0;
+        t->fds[i].special_id = 0;
+        t->fds[i].writable = 0;
+    }
+    t->fds[0].used = 1;
+    t->fds[0].kind = 1;
+    t->fds[0].special_id = 0;
+    t->fds[0].writable = 0;
+    t->fds[1].used = 1;
+    t->fds[1].kind = 1;
+    t->fds[1].special_id = 1;
+    t->fds[1].writable = 1;
+    t->fds[2].used = 1;
+    t->fds[2].kind = 1;
+    t->fds[2].special_id = 2;
+    t->fds[2].writable = 1;
+    t->brk = USER_BRK_START;
+    t->brk_mapped = USER_BRK_START;
+}
+
+void task_close_all_fds(struct task *t) {
+    if (!t)
+        return;
+    for (int i = 3; i < PROC_MAX_FD; i++) {
+        t->fds[i].used = 0;
+        t->fds[i].name[0] = 0;
+        t->fds[i].offset = 0;
+    }
+}
+
+void task_set_ready(int id) {
+    if (id >= 0 && id < MAX_TASKS &&
+        (tasks[id].state == TASK_BLOCKED || tasks[id].state == TASK_SLEEPING))
+        tasks[id].state = TASK_READY;
 }
 
 void task_switch_address_space(struct task *t) {
@@ -50,12 +96,13 @@ void task_init(void) {
         tasks[i].kstack_top = 0;
         tasks[i].user_eip = 0;
         tasks[i].user_esp = 0;
+        task_init_stdio(&tasks[i]);
     }
     current_id = -1;
     quantum_left = QUANTUM;
     task_count = 0;
     task_create("idle", idle_task);
-    printk("[task] scheduler + process slots listo\n");
+    printk("[task] scheduler + per-process FD/brk\n");
 }
 
 int task_create(const char *name, void (*entry)(void)) {
@@ -92,6 +139,7 @@ int task_create(const char *name, void (*entry)(void)) {
     t->parent = current_id;
     t->user_eip = 0;
     t->user_esp = 0;
+    task_init_stdio(t);
     int n = 0;
     while (name && name[n] && n < 15) {
         t->name[n] = name[n];
@@ -114,6 +162,7 @@ int task_create_user(const char *name, uint32_t cr3, uint32_t entry,
     t->user_eip = entry;
     t->user_esp = user_esp;
     t->parent = current_id;
+    task_init_stdio(t);
 
     if (!t->kstack) {
         t->kstack = (uint32_t *)kmalloc_a(TASK_KSTACK_SIZE);
@@ -123,9 +172,6 @@ int task_create_user(const char *name, uint32_t cr3, uint32_t entry,
         }
     }
     t->kstack_top = ((uint32_t)t->kstack + TASK_KSTACK_SIZE) & ~0xFu;
-
-    /* user tasks are driven by enter_usermode from the exec path for now;
-     * the slot still tracks address space + lifecycle for wait/kill/ps */
     t->state = TASK_READY;
     return id;
 }
@@ -141,7 +187,8 @@ void task_exit_code(int code) {
         t->exit_code = code;
         t->state = TASK_ZOMBIE;
 
-        /* free user address space if any */
+        task_close_all_fds(t);
+
         if (t->cr3 && t->cr3 != paging_kernel_pd()) {
             uint32_t doomed = t->cr3;
             t->cr3 = 0;
@@ -192,6 +239,7 @@ int task_kill(int pid) {
         return -1;
     tasks[pid].exit_code = -9;
     tasks[pid].state = TASK_ZOMBIE;
+    task_close_all_fds(&tasks[pid]);
 
     if (tasks[pid].cr3 && tasks[pid].cr3 != paging_kernel_pd()) {
         uint32_t doomed = tasks[pid].cr3;
@@ -295,7 +343,6 @@ void schedule(void) {
     current_id = next;
     quantum_left = QUANTUM;
 
-    /* switch address space + TSS.esp0 for the incoming task */
     task_switch_address_space(&tasks[next]);
 
     if (prev == next)
@@ -325,7 +372,7 @@ int task_needs_resched(void) { return need_resched; }
 void task_clear_resched(void) { need_resched = 0; }
 
 void task_list(void) {
-    printk("ID STATE     TICKS CR3      U NAME\n");
+    printk("ID STATE     TICKS CR3      U BRK      NAME\n");
     for (int i = 0; i < MAX_TASKS; i++) {
         if (tasks[i].state == TASK_UNUSED)
             continue;
@@ -339,7 +386,8 @@ void task_list(void) {
         case TASK_DEAD:     st = "DEAD    "; break;
         default: break;
         }
-        printk("%2d %s %5u %08x %c %s\n", i, st, tasks[i].ticks_ran,
-               tasks[i].cr3, tasks[i].is_user ? 'U' : 'K', tasks[i].name);
+        printk("%2d %s %5u %08x %c %08x %s\n", i, st, tasks[i].ticks_ran,
+               tasks[i].cr3, tasks[i].is_user ? 'U' : 'K', tasks[i].brk,
+               tasks[i].name);
     }
 }

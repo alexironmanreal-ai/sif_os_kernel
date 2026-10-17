@@ -4,40 +4,27 @@
 - [x] Multiboot, VGA, GDT, IDT
 
 ## Fase 1 — Interrupciones (hecha)
-- [x] PIC remap
-- [x] IRQ stubs + dispatch
-- [x] PIT timer
-- [x] Teclado PS/2
-- [x] Serial COM1
+- [x] PIC remap, IRQ, PIT, teclado, serial
 
 ## Fase 2 — Memoria (hecha)
-- [x] Multiboot mmap
-- [x] Frame allocator (bitmap)
-- [x] Paging (identity map + dynamic tables)
-- [x] kmalloc freelist + kfree
+- [x] PMM, paging, kmalloc
 
 ## Fase 3 — Procesos y FS (hecha)
-- [x] Scheduler cooperativo + round-robin
-- [x] Context switch
-- [x] Syscalls basicas (+ getdents)
-- [x] ramfs (create/read/delete/list)
-- [x] ATA PIO detect/read
-- [x] Shell interactiva
-- [x] ELF loader + userspace programs
-- [x] VFS layer basica (stdin/stdout/fd)
+- [x] Scheduler, syscalls, ramfs, ATA, shell, ELF, VFS basica
 
-## Fase 4 — Estructura de procesos (en curso)
-- [x] Page directory por proceso (clone kernel + user region privada)
-- [x] Switch CR3 en schedule
-- [x] exec crea address space + libera al salir
-- [x] task slots con cr3 / is_user / parent / kstack
-- [ ] exec asincrono (proceso corre como task real, shell no bloquea)
-- [ ] Context switch completo ring3 (frames de interrupcion)
-- [ ] Per-process brk / file descriptor table
-- [ ] Filesystem en disco (FAT simple o propio)
-- [ ] Preemptive scheduling robusto + mutex / wait queues
+## Fase 4 — Estructura de procesos
+- [x] Page directory por proceso + switch CR3
+- [x] exec con address space privado + cleanup
+- [x] task: cr3 / is_user / parent / kstack
+- [x] **Per-process file descriptor table**
+- [x] **Per-process brk (heap)**
+- [x] **mutex + wait queue basico**
+- [ ] exec asincrono (shell no bloquea)
+- [ ] Context switch completo ring3
+- [ ] Filesystem en disco (FAT simple)
+- [ ] Preemptive scheduling mas robusto
 
 ## Fase 5 — Apps y GUI (despues)
-- [ ] Mas programas userspace (editor, calculator, ...)
-- [ ] Framebuffer / modo grafico basico
-- [ ] Window manager minimo / GUI toolkit
+- [ ] Mas programas userspace
+- [ ] Framebuffer / modo grafico
+- [ ] GUI minima

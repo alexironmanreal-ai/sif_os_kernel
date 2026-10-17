@@ -11,8 +11,8 @@
 #include "string.h"
 #include "userland.h"
 
-static uint32_t user_brk = 0x08100000u;
-static uint32_t user_brk_mapped = 0x08100000u;
+#define USER_BRK_START 0x08100000u
+#define USER_BRK_MAX   0x08F00000u
 
 uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
     switch (num) {
@@ -73,22 +73,45 @@ uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
         return (uint32_t)pid;
     }
 
-    case SYS_BRK:
+    case SYS_BRK: {
+        /* per-process heap break */
+        struct task *t = task_current();
+        if (!t || !t->is_user) {
+            /* fallback for non-user context */
+            static uint32_t g_brk = USER_BRK_START;
+            static uint32_t g_mapped = USER_BRK_START;
+            if (a == 0)
+                return g_brk;
+            if (a < USER_BRK_START || a > USER_BRK_MAX)
+                return g_brk;
+            while (g_mapped < a) {
+                uint32_t frame = pmm_alloc_frame();
+                if (!frame)
+                    break;
+                paging_map(g_mapped, frame,
+                           PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
+                memset((void *)g_mapped, 0, 4096);
+                g_mapped += 4096;
+            }
+            g_brk = a;
+            return g_brk;
+        }
         if (a == 0)
-            return user_brk;
-        if (a < 0x08100000u || a > 0x08F00000u)
-            return user_brk;
-        while (user_brk_mapped < a) {
+            return t->brk;
+        if (a < USER_BRK_START || a > USER_BRK_MAX)
+            return t->brk;
+        while (t->brk_mapped < a) {
             uint32_t frame = pmm_alloc_frame();
             if (!frame)
                 break;
-            paging_map(user_brk_mapped, frame,
+            paging_map(t->brk_mapped, frame,
                        PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
-            memset((void *)user_brk_mapped, 0, 4096);
-            user_brk_mapped += 4096;
+            memset((void *)t->brk_mapped, 0, 4096);
+            t->brk_mapped += 4096;
         }
-        user_brk = a;
-        return user_brk;
+        t->brk = a;
+        return t->brk;
+    }
 
     case SYS_GETDENTS:
         if (!a || b == 0 || b > 0x10000)
@@ -104,7 +127,7 @@ uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
 void syscall_init(void) {
     extern void isr_syscall(void);
     idt_set_gate(0x80, (uint32_t)isr_syscall, 0x08, 0xEE);
-    printk("[sys] int 0x80 + getdents + process exit\n");
+    printk("[sys] int 0x80 + per-proc brk/fd\n");
 }
 
 void sys_write(const char *s) {

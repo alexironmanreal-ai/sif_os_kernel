@@ -6,6 +6,8 @@
 #define MAX_TASKS 16
 #define TASK_STACK_SIZE 4096
 #define TASK_KSTACK_SIZE 8192
+#define PROC_MAX_FD 16
+#define PROC_PATH_LEN 32
 
 enum task_state {
     TASK_UNUSED = 0,
@@ -21,6 +23,16 @@ struct cpu_context {
     uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax, eip;
 };
 
+/* per-process file descriptor */
+struct proc_fd {
+    int used;
+    int kind; /* 1=special, 2=file */
+    int special_id;
+    int writable;
+    char name[PROC_PATH_LEN];
+    uint32_t offset;
+};
+
 struct task {
     int id;
     enum task_state state;
@@ -34,23 +46,25 @@ struct task {
     int wait_parent;
     int waiting_on;
 
-    /* process / address-space fields */
-    uint32_t cr3;          /* page directory physical; 0 = kernel PD */
-    int is_user;           /* 1 = userspace process */
-    int parent;            /* parent task id, -1 if none */
-    uint32_t *kstack;      /* dedicated kernel stack for ring3 */
+    /* process / address-space */
+    uint32_t cr3;
+    int is_user;
+    int parent;
+    uint32_t *kstack;
     uint32_t kstack_top;
     uint32_t user_eip;
     uint32_t user_esp;
+
+    /* per-process resources */
+    struct proc_fd fds[PROC_MAX_FD];
+    uint32_t brk;
+    uint32_t brk_mapped;
 };
 
 void task_init(void);
 int task_create(const char *name, void (*entry)(void));
-
-/* create a user process slot (address space must be set by caller) */
 int task_create_user(const char *name, uint32_t cr3, uint32_t entry,
                      uint32_t user_esp);
-
 void task_yield(void);
 void task_exit(void);
 void task_exit_code(int code);
@@ -64,8 +78,8 @@ void task_sleep_ms(uint32_t ms);
 int task_kill(int pid);
 int task_wait(int pid, int *status);
 int task_get_exit(int pid);
-
-/* switch to this task's address space (kernel PD if cr3==0) */
 void task_switch_address_space(struct task *t);
+void task_init_stdio(struct task *t);
+void task_close_all_fds(struct task *t);
 
 #endif
