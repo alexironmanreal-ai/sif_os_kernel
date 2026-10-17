@@ -1,17 +1,14 @@
 # Roadmap SIF Kernel
 
-## Fase 0–3 (hechas)
-Boot, IRQs, memoria, scheduler, syscalls, ramfs, ELF, VFS, shell
+## Hecho
+- Boot, IRQs, memoria, procesos, syscalls, ramfs, ELF, VFS
+- Address space / FD / brk por proceso
+- SFS en disco (ATA R/W)
+- **GUI minima (VGA mode 13h desktop)**
 
-## Fase 4 — Estructura
-- [x] Page directory por proceso + CR3
-- [x] Per-process FD table + brk
-- [x] mutex basico
-- [x] **Filesystem en disco (SFS sobre ATA R/W)**
+## Siguiente
+- [ ] Mouse PS/2
+- [ ] Ventanas arrastrables / mas widgets
 - [ ] exec asincrono
-- [ ] Context switch ring3 completo
-- [ ] Preemptive + wait queues mas robustos
-
-## Fase 5 — Apps y GUI
-- [ ] Mas programas userspace
-- [ ] Framebuffer / GUI minima
+- [ ] Mas apps userspace
+- [ ] Framebuffer VBE (mayor resolucion)

@@ -1,12 +1,10 @@
-# SIF Kernel v1.6
+# SIF Kernel v1.7
 
-## Nuevo (v1.6.0-disk) — Filesystem en disco
-- **ATA WRITE PIO** (lectura + escritura)
-- **SFS** (SIF Simple File System): superblock + tabla de archivos + bloques de datos
-- Comandos: `mkfs` `mount` `dls` `dcat` `dwrite` `drm` `sync`
-- QEMU usa `disk.img` (se crea solo, 32 MB)
-
-## Probar disco
+## Nuevo — GUI minima
+- VGA **mode 13h** (320×200×256)
+- Escritorio, barra de tareas, ventana, paneles
+- Comando: `gui`
+- Teclas: `1` Apps · `2` Disk · `3` About · `ESC` volver a texto
 
 ```bash
 git pull origin main
@@ -14,24 +12,16 @@ make clean && make && make run
 ```
 
 ```
-SIF> mkfs
-SIF> dwrite hola.txt hola desde el disco
-SIF> dls
-SIF> dcat hola.txt
-SIF> sync
+SIF> gui
 ```
 
-Reinicia QEMU (`make run` de nuevo) y:
-```
-SIF> mount
-SIF> dls
-SIF> dcat hola.txt
-```
+En la GUI:
+- **1** — aplicaciones
+- **2** — estado del disco/SFS
+- **3** — about / version
+- **ESC** — vuelve a la shell de texto
 
 ## Tambien
 ```
-SIF> exec hello.elf
-SIF> ls          # ramfs
-SIF> dls         # disco
-SIF> ps
+SIF> mkfs / dls / exec hello.elf / ps
 ```

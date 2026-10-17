@@ -17,6 +17,7 @@
 #include "io.h"
 #include "userland.h"
 #include "vfs.h"
+#include "gui.h"
 #include <stddef.h>
 
 #define LINE_MAX 160
@@ -361,8 +362,6 @@ static int c_fdread(int a, char **v) {
         printk("\n");
     return 0;
 }
-
-/* ---- disk FS commands ---- */
 static int c_mkfs(int a, char **v) {
     (void)a;
     (void)v;
@@ -438,6 +437,12 @@ static int c_drm(int a, char **v) {
     printk("borrado disco\n");
     return 0;
 }
+static int c_gui(int a, char **v) {
+    (void)a;
+    (void)v;
+    gui_run();
+    return 0;
+}
 
 static void reg(void) {
     cmd_init();
@@ -470,6 +475,7 @@ static void reg(void) {
     cmd_register("dcat", "leer disco", c_dcat);
     cmd_register("dwrite", "escribir disco", c_dwrite);
     cmd_register("drm", "borrar disco", c_drm);
+    cmd_register("gui", "escritorio grafico", c_gui);
     cmd_register("pci", "PCI", c_pci);
     cmd_register("sleep", "ms", c_sleep);
     cmd_register("hexdump", "hex", c_hexdump);
@@ -488,7 +494,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF shell - help | mkfs | dls | exec\nSIF> ");
+    printk("SIF shell - help | gui | mkfs | exec\nSIF> ");
     for (;;) {
         if (task_needs_resched()) {
             task_clear_resched();
