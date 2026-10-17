@@ -38,6 +38,17 @@ static void hist_add(const char *line) {
     hist_count++;
 }
 
+static int parse_int(const char *s) {
+    int n = 0, neg = 0;
+    if (*s == '-') {
+        neg = 1;
+        s++;
+    }
+    while (*s >= '0' && *s <= '9')
+        n = n * 10 + (*s++ - '0');
+    return neg ? -n : n;
+}
+
 static void wa(void) {
     for (int i = 0; i < 5; i++) {
         printk("[A] %d\n", i);
@@ -62,9 +73,12 @@ static void wb(void) {
 static int c_help(int a, char **v) {
     (void)a;
     (void)v;
-    printk("\n=== SIF Shell ===\n");
+    printk("\n=== SIF Shell (async exec) ===\n");
     cmd_list();
-    printk("\n");
+    printk("\nexec FILE  -> spawn async (shell no bloquea)\n");
+    printk("run FILE   -> spawn + wait\n");
+    printk("wait [pid] -> esperar zombie\n");
+    printk("kill PID   -> matar proceso\n\n");
     return 0;
 }
 static int c_version(int a, char **v) {
@@ -326,13 +340,66 @@ static int c_user(int a, char **v) {
     userland_run_test();
     return 0;
 }
+
 static int c_exec(int a, char **v) {
     if (a < 2) {
         printk("uso: exec FILE.elf [args...]\n");
         return -1;
     }
-    return userland_exec_file_argv(v[1], a - 1, &v[1]);
+    int pid = userland_spawn_file_argv(v[1], a - 1, &v[1]);
+    if (pid < 0) {
+        printk("spawn fail\n");
+        return -1;
+    }
+    printk("[ok] spawned pid=%d (async)\n", pid);
+    return 0;
 }
+
+static int c_run(int a, char **v) {
+    if (a < 2) {
+        printk("uso: run FILE.elf [args...]\n");
+        return -1;
+    }
+    int pid = userland_spawn_file_argv(v[1], a - 1, &v[1]);
+    if (pid < 0) {
+        printk("spawn fail\n");
+        return -1;
+    }
+    printk("[run] waiting pid=%d...\n", pid);
+    int st = 0;
+    int w = task_wait(pid, &st);
+    printk("[run] pid=%d done exit=%d (waited %d)\n", pid, st, w);
+    return st;
+}
+
+static int c_wait(int a, char **v) {
+    int pid = -1;
+    if (a >= 2)
+        pid = parse_int(v[1]);
+    int st = 0;
+    int w = task_wait(pid, &st);
+    if (w < 0) {
+        printk("wait fail\n");
+        return -1;
+    }
+    printk("wait: pid=%d exit=%d\n", w, st);
+    return 0;
+}
+
+static int c_kill(int a, char **v) {
+    if (a < 2) {
+        printk("uso: kill PID\n");
+        return -1;
+    }
+    int pid = parse_int(v[1]);
+    if (task_kill(pid) < 0) {
+        printk("kill fail\n");
+        return -1;
+    }
+    printk("killed %d\n", pid);
+    return 0;
+}
+
 static int c_open(int a, char **v) {
     if (a < 2) {
         printk("uso: open FILE\n");
@@ -347,9 +414,7 @@ static int c_fdread(int a, char **v) {
         printk("uso: fdread FD\n");
         return -1;
     }
-    int fd = 0;
-    for (char *p = v[1]; *p >= '0' && *p <= '9'; p++)
-        fd = fd * 10 + (*p - '0');
+    int fd = parse_int(v[1]);
     char buf[128];
     int n = vfs_read(fd, buf, sizeof(buf) - 1);
     if (n < 0) {
@@ -484,8 +549,11 @@ static void reg(void) {
     cmd_register("panic", "crash", c_panic);
     cmd_register("true", "0", c_true);
     cmd_register("false", "1", c_false);
-    cmd_register("user", "ring3 test", c_user);
-    cmd_register("exec", "ELF userspace", c_exec);
+    cmd_register("user", "ring3 test async", c_user);
+    cmd_register("exec", "spawn async ELF", c_exec);
+    cmd_register("run", "spawn+wait ELF", c_run);
+    cmd_register("wait", "esperar proceso", c_wait);
+    cmd_register("kill", "matar PID", c_kill);
     cmd_register("open", "abrir fd", c_open);
     cmd_register("fdread", "leer fd", c_fdread);
 }
@@ -494,7 +562,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF shell - help | gui | mkfs | exec\nSIF> ");
+    printk("SIF shell async - exec | run | wait | gui\nSIF> ");
     for (;;) {
         if (task_needs_resched()) {
             task_clear_resched();
