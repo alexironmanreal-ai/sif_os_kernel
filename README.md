@@ -1,11 +1,6 @@
-# SIF Kernel v1.7
+# SIF Kernel v1.7.1
 
-## Nuevo — GUI minima
-- VGA **mode 13h** (320×200×256)
-- Escritorio, barra de tareas, ventana, paneles
-- Comando: `gui`
-- Teclas: `1` Apps · `2` Disk · `3` About · `ESC` volver a texto
-
+## GUI (arreglado)
 ```bash
 git pull origin main
 make clean && make && make run
@@ -15,13 +10,14 @@ make clean && make && make run
 SIF> gui
 ```
 
-En la GUI:
-- **1** — aplicaciones
-- **2** — estado del disco/SFS
-- **3** — about / version
-- **ESC** — vuelve a la shell de texto
+Deberias ver escritorio azul 320x200. Si la ventana de QEMU queda negra, mira el **serial** (terminal):
+```
+[gfx] mode13 begin
+[gfx] mode13 ok
+[gui] desktop drawn
+```
 
-## Tambien
-```
-SIF> mkfs / dls / exec hello.elf / ps
-```
+Teclas: `1` `2` `3` paneles · `ESC` o `q` salir
+
+## Nota QEMU
+Usa la ventana grafica de QEMU (no solo -nographic). El Makefile ya abre VGA normal.

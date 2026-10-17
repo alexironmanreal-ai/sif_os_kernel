@@ -28,36 +28,29 @@ static void draw_window(int x, int y, int w, int h, const char *title) {
     gfx_rect(x, y, w, h, GFX_WHITE);
     gfx_fillrect(x + 1, y + 1, w - 2, 12, GFX_BLUE);
     gfx_text(x + 4, y + 3, title, GFX_WHITE, GFX_BLUE);
-    /* close box */
     gfx_fillrect(x + w - 12, y + 2, 9, 9, GFX_RED);
     gfx_text(x + w - 11, y + 2, "x", GFX_WHITE, GFX_RED);
 }
 
 static void draw_desktop(void) {
-    /* wallpaper */
     gfx_fillrect(0, 0, GFX_WIDTH, GFX_HEIGHT - 16, GFX_BLUE);
 
-    /* subtle pattern */
     for (int y = 0; y < GFX_HEIGHT - 16; y += 16)
         for (int x = 0; x < GFX_WIDTH; x += 16)
             gfx_putpixel(x, y, GFX_LIGHT_BLUE);
 
-    /* taskbar */
     gfx_fillrect(0, GFX_HEIGHT - 16, GFX_WIDTH, 16, GFX_DARK_GREY);
     gfx_hline(0, GFX_HEIGHT - 16, GFX_WIDTH, GFX_WHITE);
     gfx_text(4, GFX_HEIGHT - 12, "SIF", GFX_YELLOW, GFX_DARK_GREY);
-    gfx_text(40, GFX_HEIGHT - 12, "1:Apps 2:Disk 3:About  ESC:exit",
+    gfx_text(36, GFX_HEIGHT - 12, "1:Apps 2:Disk 3:About  ESC/q:exit",
              GFX_WHITE, GFX_DARK_GREY);
 
-    /* main window */
     draw_window(20, 12, 280, 160, "SIF Desktop");
 
-    /* tab buttons */
     draw_button(28, 30, 56, 14, "Apps", panel == 0);
     draw_button(90, 30, 56, 14, "Disk", panel == 1);
     draw_button(152, 30, 56, 14, "About", panel == 2);
 
-    /* content area */
     gfx_fillrect(28, 50, 264, 112, GFX_WHITE);
     gfx_rect(28, 50, 264, 112, GFX_DARK_GREY);
 
@@ -86,24 +79,20 @@ static void draw_desktop(void) {
         gfx_text(36, 56, SIF_KERNEL_NAME, GFX_BLACK, GFX_WHITE);
         gfx_text(36, 72, "Version:", GFX_DARK_GREY, GFX_WHITE);
         gfx_text(100, 72, SIF_KERNEL_VERSION, GFX_BLUE, GFX_WHITE);
-        gfx_text(36, 92, "Hobby OS — structure first",
-                 GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(36, 108, "Then apps & GUI",
-                 GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(36, 128, "Keys: 1 2 3 panels | ESC quit",
-                 GFX_BLACK, GFX_WHITE);
-        char up[32];
+        gfx_text(36, 92, "Hobby OS - structure first", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(36, 108, "Then apps and GUI", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(36, 128, "Keys: 1 2 3 | ESC or q quit", GFX_BLACK, GFX_WHITE);
+        char up[16];
         uint32_t s = timer_seconds();
-        /* tiny uptime string */
         up[0] = 'u';
         up[1] = 'p';
         up[2] = ' ';
-        up[3] = '0' + (char)((s / 60) / 10 % 10);
-        up[4] = '0' + (char)((s / 60) % 10);
+        up[3] = (char)('0' + (s / 600) % 10);
+        up[4] = (char)('0' + (s / 60) % 10);
         up[5] = 'm';
         up[6] = ' ';
-        up[7] = '0' + (char)((s % 60) / 10);
-        up[8] = '0' + (char)(s % 60);
+        up[7] = (char)('0' + (s % 60) / 10);
+        up[8] = (char)('0' + (s % 60) % 10);
         up[9] = 's';
         up[10] = 0;
         gfx_text(36, 144, up, GFX_DARK_GREY, GFX_WHITE);
@@ -111,10 +100,12 @@ static void draw_desktop(void) {
 }
 
 void gui_run(void) {
-    printk("[gui] entering mode 13h — ESC to exit\n");
+    printk("[gui] start - ESC or q to exit\n");
     panel = 0;
+
     gfx_init_mode13();
     draw_desktop();
+    printk("[gui] desktop drawn\n");
 
     for (;;) {
         if (!keyboard_has_input()) {
@@ -124,7 +115,7 @@ void gui_run(void) {
         int ch = keyboard_read_char();
         if (!ch)
             continue;
-        if (ch == 27) /* ESC */
+        if (ch == 27 || ch == 'q' || ch == 'Q')
             break;
         if (ch == '1') {
             panel = 0;
@@ -141,5 +132,6 @@ void gui_run(void) {
     gfx_restore_text();
     vga_init();
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    printk("\n[gui] back to text mode\n");
+    vga_clear();
+    printk("[gui] back to text mode\n");
 }
