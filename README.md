@@ -1,7 +1,10 @@
-# SIF Kernel v1.9.0-bios
+# SIF Kernel v1.10.0-aqua
 
-## BIOS Setup
-Pantalla estilo BIOS clasica (azul, menus Main/Advanced/Boot/Exit).
+## GUI estilo Mac (Aqua)
+- Barra de menu superior
+- Ventana tipo Finder (semaforos rojo/amarillo/verde)
+- Sidebar + contenido
+- Dock inferior
 
 ```bash
 git fetch origin && git reset --hard origin/main
@@ -9,25 +12,17 @@ make clean && make && make run
 ```
 
 ```
-SIF> bios
-```
-
-O desde el escritorio:
-```
 SIF> gui
 ```
-luego tecla **4**.
 
-### Controles BIOS
 | Tecla | Accion |
 |-------|--------|
-| **A / D** | Menu izquierda/derecha |
-| **W / S** | Item arriba/abajo |
-| **1-4** | Main / Advanced / Boot / Exit |
-| **Enter** | Seleccionar (en Exit sale) |
-| **ESC / Q** | Salir |
+| **1** | Apps |
+| **2** | Disk |
+| **3** | About |
+| **4** | BIOS setup |
+| **5** / **ESC** | Volver a shell |
+| **A/D** | Mover en el dock |
+| **Enter** | Abrir item del dock |
 
-## Tambien
-```
-exec hello.elf | run | wait | gui | mkfs
-```
+Tambien: `bios` directo desde shell.
