@@ -18,6 +18,7 @@
 #include "userland.h"
 #include "vfs.h"
 #include "gui.h"
+#include "bios.h"
 #include <stddef.h>
 
 #define LINE_MAX 160
@@ -73,12 +74,10 @@ static void wb(void) {
 static int c_help(int a, char **v) {
     (void)a;
     (void)v;
-    printk("\n=== SIF Shell (async exec) ===\n");
+    printk("\n=== SIF Shell ===\n");
     cmd_list();
-    printk("\nexec FILE  -> spawn async (shell no bloquea)\n");
-    printk("run FILE   -> spawn + wait\n");
-    printk("wait [pid] -> esperar zombie\n");
-    printk("kill PID   -> matar proceso\n\n");
+    printk("\nbios / gui  -> pantallas graficas\n");
+    printk("exec / run / wait / kill\n\n");
     return 0;
 }
 static int c_version(int a, char **v) {
@@ -508,6 +507,12 @@ static int c_gui(int a, char **v) {
     gui_run();
     return 0;
 }
+static int c_bios(int a, char **v) {
+    (void)a;
+    (void)v;
+    bios_run();
+    return 0;
+}
 
 static void reg(void) {
     cmd_init();
@@ -541,6 +546,7 @@ static void reg(void) {
     cmd_register("dwrite", "escribir disco", c_dwrite);
     cmd_register("drm", "borrar disco", c_drm);
     cmd_register("gui", "escritorio grafico", c_gui);
+    cmd_register("bios", "SIF BIOS setup", c_bios);
     cmd_register("pci", "PCI", c_pci);
     cmd_register("sleep", "ms", c_sleep);
     cmd_register("hexdump", "hex", c_hexdump);
@@ -562,7 +568,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF shell async - exec | run | wait | gui\nSIF> ");
+    printk("SIF shell - bios | gui | exec | help\nSIF> ");
     for (;;) {
         if (task_needs_resched()) {
             task_clear_resched();
