@@ -8,10 +8,8 @@
 #include "diskfs.h"
 #include "timer.h"
 #include "pmm.h"
-#include "kmalloc.h"
 #include "string.h"
 
-/* Award/AMI style palette use */
 #define BIOS_BG      GFX_BLUE
 #define BIOS_FG      GFX_WHITE
 #define BIOS_TITLE   GFX_YELLOW
@@ -57,9 +55,9 @@ static void draw_header(void) {
 static void draw_footer(void) {
     gfx_fillrect(0, GFX_HEIGHT - 28, GFX_WIDTH, 28, BIOS_BG);
     bios_hline_double(0, GFX_HEIGHT - 28, GFX_WIDTH);
-    gfx_text(8, GFX_HEIGHT - 24, "↑↓ item  ←→ menu  Enter select  ESC quit",
+    gfx_text(8, GFX_HEIGHT - 24, "W/S item  A/D menu  Enter  ESC quit",
              BIOS_DIM, BIOS_BG);
-    gfx_text(8, GFX_HEIGHT - 14, "F10 Save & Exit (demo)   F9 Load Defaults",
+    gfx_text(8, GFX_HEIGHT - 14, "1-4 jump tabs   Q exit",
              BIOS_DIM, BIOS_BG);
 }
 
@@ -109,7 +107,6 @@ static void draw_main_panel(void) {
 
     char buf[32];
     uint32_t free_f = pmm_free_frames();
-    uint32_t used_f = pmm_used_frames();
     uint32_t tot_f = pmm_total_frames();
     uint32_t kb = tot_f * 4;
 
@@ -126,7 +123,6 @@ static void draw_main_panel(void) {
     };
     char vals[9][28];
     uint32_t sec = timer_seconds();
-    /* fake clock from uptime */
     uint32_t h = (sec / 3600) % 24;
     uint32_t m = (sec / 60) % 60;
     uint32_t s = sec % 60;
@@ -144,11 +140,20 @@ static void draw_main_panel(void) {
     vals[2][27] = 0;
     strcpy(vals[3], "i386 (QEMU)");
     fmt_u(buf, kb);
-    strcpy(vals[4], buf);
-    strcat(vals[4], " KB");
+    /* vals[4] = "NNNN KB" without strcat */
+    {
+        int i = 0;
+        while (buf[i] && i < 20) {
+            vals[4][i] = buf[i];
+            i++;
+        }
+        vals[4][i++] = ' ';
+        vals[4][i++] = 'K';
+        vals[4][i++] = 'B';
+        vals[4][i] = 0;
+    }
     fmt_u(vals[5], tot_f);
     fmt_u(vals[6], free_f);
-    (void)used_f;
     strcpy(vals[7], ata_present() ? "Present" : "Not Found");
     if (!ata_present())
         strcpy(vals[8], "N/A");
@@ -243,7 +248,6 @@ void bios_run(void) {
 
     for (;;) {
         if (!keyboard_has_input()) {
-            /* refresh clock on Main roughly */
             __asm__ volatile("hlt");
             continue;
         }
@@ -251,16 +255,14 @@ void bios_run(void) {
         if (!ch)
             continue;
 
-        if (ch == 27) /* ESC */
+        if (ch == 27)
             break;
 
-        /* number keys jump menu */
         if (ch == '1') { menu_sel = MENU_MAIN; item_sel = 0; draw_all(); continue; }
         if (ch == '2') { menu_sel = MENU_ADV;  item_sel = 0; draw_all(); continue; }
         if (ch == '3') { menu_sel = MENU_BOOT; item_sel = 0; draw_all(); continue; }
         if (ch == '4') { menu_sel = MENU_EXIT; item_sel = 0; draw_all(); continue; }
 
-        /* WASD / hjkl style + letters since no raw scancodes for arrows in shell map */
         if (ch == 'a' || ch == 'A') {
             menu_sel = (menu_sel + MENU_COUNT - 1) % MENU_COUNT;
             item_sel = 0;
@@ -280,22 +282,19 @@ void bios_run(void) {
         } else if (ch == '\n' || ch == '\r') {
             if (menu_sel == MENU_EXIT) {
                 if (item_sel == 0 || item_sel == 1)
-                    break; /* save&exit or exit */
+                    break;
                 if (item_sel == 2) {
                     item_sel = 0;
                     menu_sel = MENU_MAIN;
                     draw_all();
                 }
             } else {
-                /* toggle feel: just redraw */
                 draw_all();
             }
         } else if (ch == 'q' || ch == 'Q') {
             break;
-        } else {
-            /* refresh main for live clock when any other key */
-            if (menu_sel == MENU_MAIN)
-                draw_all();
+        } else if (menu_sel == MENU_MAIN) {
+            draw_all();
         }
     }
 
