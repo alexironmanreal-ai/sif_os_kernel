@@ -18,7 +18,6 @@ static int quantum_left = 0;
 
 #define USER_BRK_START 0x08100000u
 
-/* Forward: kernel stub that enters ring3 for user tasks */
 static void user_trampoline(void);
 
 static void idle_task(void) {
@@ -170,7 +169,6 @@ int task_create(const char *name, void (*entry)(void)) {
 
 int task_create_user(const char *name, uint32_t cr3, uint32_t entry,
                      uint32_t user_esp) {
-    /* kernel entry = trampoline; ring3 eip/esp stored on task */
     int id = task_create(name, user_trampoline);
     if (id < 0)
         return -1;
@@ -299,13 +297,11 @@ int task_wait(int pid, int *status) {
                 continue;
             if (pid >= 0 && i != pid)
                 continue;
-            /* prefer our children */
             if (pid < 0 && tasks[i].parent != current_id && tasks[i].parent >= 0)
                 continue;
             found = i;
             break;
         }
-        /* if strict child filter found nothing, accept any zombie when pid<0 */
         if (found < 0 && pid < 0) {
             for (int i = 0; i < MAX_TASKS; i++) {
                 if (tasks[i].state == TASK_ZOMBIE) {
@@ -345,13 +341,28 @@ void schedule(void) {
 
     int next = -1;
     int start = (current_id < 0) ? 0 : (current_id + 1);
+
+    /* Prefer non-idle READY tasks so idle does not starve the system */
     for (int n = 0; n < MAX_TASKS; n++) {
         int i = (start + n) % MAX_TASKS;
-        if (tasks[i].state == TASK_READY) {
-            next = i;
-            break;
+        if (tasks[i].state != TASK_READY)
+            continue;
+        if (i == 0 && task_count > 1)
+            continue; /* skip idle if something else is ready */
+        next = i;
+        break;
+    }
+    /* fallback: idle */
+    if (next < 0) {
+        for (int n = 0; n < MAX_TASKS; n++) {
+            int i = (start + n) % MAX_TASKS;
+            if (tasks[i].state == TASK_READY) {
+                next = i;
+                break;
+            }
         }
     }
+
     if (next < 0) {
         if (current_id >= 0 &&
             (tasks[current_id].state == TASK_RUNNING ||

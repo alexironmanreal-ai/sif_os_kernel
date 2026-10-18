@@ -71,14 +71,21 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     __asm__ volatile("sti");
     printk("[ok] interrupciones ON\n");
     printk("----------------------------------------\n");
-    printk("  Abre la VENTANA de video de QEMU\n");
-    printk("  (no solo esta terminal serial)\n");
+    printk("  Mira la ventana de VIDEO de QEMU\n");
     printk("  Teclas: 1-5 dock | ESC = Terminal\n");
     printk("----------------------------------------\n");
-    printk("[boot] starting desktop...\n");
 
-    if (task_create("desktop", gui_task) < 0)
-        panic("no desktop task");
+    /*
+     * Run GUI on the boot path (no task switch). The previous approach
+     * created a desktop task that stayed READY while idle monopolized
+     * the CPU, so the GUI never started.
+     */
+    printk("[boot] launching GUI now...\n");
+    gui_run();
+
+    printk("[boot] GUI exited — starting shell task\n");
+    if (task_create("shell", shell_task) < 0)
+        panic("no shell task");
 
     for (;;) {
         schedule();
