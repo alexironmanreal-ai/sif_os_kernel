@@ -60,7 +60,6 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     kmalloc_init();
     timer_init(100);
     keyboard_init();
-    mouse_init();
     task_init();
     ata_init();
     fs_init();
@@ -72,15 +71,17 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
 
     __asm__ volatile("sti");
     printk("[ok] interrupciones ON\n");
-    printk("----------------------------------------\n");
-    printk("  Mouse + teclado en ventana QEMU\n");
-    printk("  Clic dock | ESC = Terminal\n");
-    printk("----------------------------------------\n");
 
-    printk("[boot] launching GUI now...\n");
+    /* mouse after sti so timeouts cannot wedge boot forever */
+    mouse_init();
+
+    printk("----------------------------------------\n");
+    printk("  GUI + mouse | ESC = shell\n");
+    printk("----------------------------------------\n");
+    printk("[boot] launching GUI...\n");
     gui_run();
 
-    printk("[boot] GUI exited — starting shell task\n");
+    printk("[boot] shell task\n");
     if (task_create("shell", shell_task) < 0)
         panic("no shell task");
 
