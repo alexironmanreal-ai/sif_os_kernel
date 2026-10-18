@@ -1,12 +1,11 @@
 # Roadmap SIF Kernel
 
 ## Hecho
-- Procesos, addr-space, FD/brk, mutex
-- SFS en disco
-- GUI mode 13h
-- **Exec async (spawn + wait + shell-as-task)**
+- Procesos, async exec, disco SFS
+- GUI desktop mode 13h
+- **BIOS Setup Utility (estilo Award)**
 
 ## Siguiente
-- [ ] Mas apps userspace
 - [ ] Mouse PS/2
+- [ ] Mas apps userspace
 - [ ] VBE mayor resolucion

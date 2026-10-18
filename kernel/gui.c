@@ -1,4 +1,5 @@
 #include "gui.h"
+#include "bios.h"
 #include "gfx.h"
 #include "keyboard.h"
 #include "printk.h"
@@ -42,70 +43,52 @@ static void draw_desktop(void) {
     gfx_fillrect(0, GFX_HEIGHT - 16, GFX_WIDTH, 16, GFX_DARK_GREY);
     gfx_hline(0, GFX_HEIGHT - 16, GFX_WIDTH, GFX_WHITE);
     gfx_text(4, GFX_HEIGHT - 12, "SIF", GFX_YELLOW, GFX_DARK_GREY);
-    gfx_text(36, GFX_HEIGHT - 12, "1:Apps 2:Disk 3:About  ESC/q:exit",
+    gfx_text(36, GFX_HEIGHT - 12, "1-3 panel  4:BIOS  ESC:exit",
              GFX_WHITE, GFX_DARK_GREY);
 
     draw_window(20, 12, 280, 160, "SIF Desktop");
 
-    draw_button(28, 30, 56, 14, "Apps", panel == 0);
-    draw_button(90, 30, 56, 14, "Disk", panel == 1);
-    draw_button(152, 30, 56, 14, "About", panel == 2);
+    draw_button(28, 30, 48, 14, "Apps", panel == 0);
+    draw_button(80, 30, 48, 14, "Disk", panel == 1);
+    draw_button(132, 30, 48, 14, "About", panel == 2);
+    draw_button(184, 30, 48, 14, "BIOS", 0);
 
     gfx_fillrect(28, 50, 264, 112, GFX_WHITE);
     gfx_rect(28, 50, 264, 112, GFX_DARK_GREY);
 
     if (panel == 0) {
         gfx_text(36, 56, "Applications", GFX_BLACK, GFX_WHITE);
-        gfx_text(36, 72, "* hello.elf   (userspace)", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(36, 84, "* echo.elf    (userspace)", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(36, 96, "* cat.elf / ls.elf", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(36, 112, "Shell: exec hello.elf", GFX_BLUE, GFX_WHITE);
-        gfx_text(36, 128, "Shell: demo / ps / mem", GFX_BLUE, GFX_WHITE);
-        gfx_text(36, 144, "More apps coming soon", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(36, 72, "* hello.elf / echo.elf", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(36, 84, "* cat.elf / ls.elf", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(36, 100, "Shell: exec hello.elf", GFX_BLUE, GFX_WHITE);
+        gfx_text(36, 112, "Shell: run / wait / kill", GFX_BLUE, GFX_WHITE);
+        gfx_text(36, 128, "Press 4 for BIOS setup", GFX_BLACK, GFX_WHITE);
     } else if (panel == 1) {
         gfx_text(36, 56, "Disk / SFS", GFX_BLACK, GFX_WHITE);
         if (!ata_present()) {
-            gfx_text(36, 76, "No ATA disk attached", GFX_RED, GFX_WHITE);
-            gfx_text(36, 92, "make run uses disk.img", GFX_DARK_GREY, GFX_WHITE);
+            gfx_text(36, 76, "No ATA disk", GFX_RED, GFX_WHITE);
         } else if (!diskfs_mounted()) {
-            gfx_text(36, 76, "Disk present, SFS not mounted", GFX_BROWN, GFX_WHITE);
-            gfx_text(36, 92, "Shell: mkfs then dwrite", GFX_BLUE, GFX_WHITE);
+            gfx_text(36, 76, "Disk OK, SFS not mounted", GFX_BROWN, GFX_WHITE);
+            gfx_text(36, 92, "Shell: mkfs", GFX_BLUE, GFX_WHITE);
         } else {
             gfx_text(36, 76, "SFS mounted OK", GFX_GREEN, GFX_WHITE);
-            gfx_text(36, 92, "Shell: dls / dcat / dwrite", GFX_BLUE, GFX_WHITE);
         }
-        gfx_text(36, 120, "Ramfs still available (ls)", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(36, 120, "dls / dcat / dwrite", GFX_DARK_GREY, GFX_WHITE);
     } else {
         gfx_text(36, 56, SIF_KERNEL_NAME, GFX_BLACK, GFX_WHITE);
-        gfx_text(36, 72, "Version:", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(100, 72, SIF_KERNEL_VERSION, GFX_BLUE, GFX_WHITE);
-        gfx_text(36, 92, "Hobby OS - structure first", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(36, 108, "Then apps and GUI", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(36, 128, "Keys: 1 2 3 | ESC or q quit", GFX_BLACK, GFX_WHITE);
-        char up[16];
-        uint32_t s = timer_seconds();
-        up[0] = 'u';
-        up[1] = 'p';
-        up[2] = ' ';
-        up[3] = (char)('0' + (s / 600) % 10);
-        up[4] = (char)('0' + (s / 60) % 10);
-        up[5] = 'm';
-        up[6] = ' ';
-        up[7] = (char)('0' + (s % 60) / 10);
-        up[8] = (char)('0' + (s % 60) % 10);
-        up[9] = 's';
-        up[10] = 0;
-        gfx_text(36, 144, up, GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(36, 72, SIF_KERNEL_VERSION, GFX_BLUE, GFX_WHITE);
+        gfx_text(36, 92, "Desktop + BIOS setup", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(36, 108, "Async exec enabled", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(36, 128, "4 = BIOS   ESC = quit", GFX_BLACK, GFX_WHITE);
     }
 }
 
 void gui_run(void) {
-    printk("[gui] start - ESC or q to exit\n");
+    printk("[gui] desktop - 4=BIOS ESC=exit\n");
     panel = 0;
 
     gfx_init_mode13();
     draw_desktop();
-    printk("[gui] desktop drawn\n");
 
     for (;;) {
         if (!keyboard_has_input()) {
@@ -125,6 +108,13 @@ void gui_run(void) {
             draw_desktop();
         } else if (ch == '3') {
             panel = 2;
+            draw_desktop();
+        } else if (ch == '4' || ch == 'b' || ch == 'B') {
+            /* leave desktop gfx; bios_run manages its own mode */
+            gfx_restore_text();
+            bios_run();
+            /* bios_run restores text; re-enter graphics for desktop */
+            gfx_init_mode13();
             draw_desktop();
         }
     }

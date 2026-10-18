@@ -1,17 +1,33 @@
-# SIF Kernel v1.8.0-async
+# SIF Kernel v1.9.0-bios
 
-## Exec asincrono
-```
-SIF> exec hello.elf          # lanza y vuelve al prompt
-SIF> ps                      # ves el proceso user
-SIF> wait                    # espera a que termine
-SIF> run hello.elf           # spawn + wait (sincrono)
-```
+## BIOS Setup
+Pantalla estilo BIOS clasica (azul, menus Main/Advanced/Boot/Exit).
 
 ```bash
-git fetch origin
-git reset --hard origin/main
+git fetch origin && git reset --hard origin/main
 make clean && make && make run
 ```
 
-Version al boot: **1.8.0-async**
+```
+SIF> bios
+```
+
+O desde el escritorio:
+```
+SIF> gui
+```
+luego tecla **4**.
+
+### Controles BIOS
+| Tecla | Accion |
+|-------|--------|
+| **A / D** | Menu izquierda/derecha |
+| **W / S** | Item arriba/abajo |
+| **1-4** | Main / Advanced / Boot / Exit |
+| **Enter** | Seleccionar (en Exit sale) |
+| **ESC / Q** | Salir |
+
+## Tambien
+```
+exec hello.elf | run | wait | gui | mkfs
+```
