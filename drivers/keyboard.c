@@ -27,13 +27,18 @@ static const char keymap_shift[128] = {
 
 static void kbd_push(char c) {
     uint32_t next = (head + 1) % BUF_SIZE;
-    if (next == tail) return;
+    if (next == tail)
+        return;
     ring[head] = c;
     head = next;
 }
 
 static void keyboard_callback(void) {
-    if (!(inb(KBD_STAT) & 1))
+    uint8_t status = inb(KBD_STAT);
+    if (!(status & 1))
+        return;
+    /* Mouse data shares port — leave for IRQ12 handler */
+    if (status & 0x20)
         return;
 
     uint8_t sc = inb(KBD_DATA);
@@ -68,7 +73,6 @@ static void keyboard_callback(void) {
 
     if (c)
         kbd_push(c);
-    /* sin eco: solo la shell imprime */
 }
 
 void keyboard_init(void) {

@@ -8,6 +8,7 @@
 #include "serial.h"
 #include "timer.h"
 #include "keyboard.h"
+#include "mouse.h"
 #include "multiboot.h"
 #include "pmm.h"
 #include "paging.h"
@@ -59,6 +60,7 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     kmalloc_init();
     timer_init(100);
     keyboard_init();
+    mouse_init();
     task_init();
     ata_init();
     fs_init();
@@ -71,15 +73,10 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     __asm__ volatile("sti");
     printk("[ok] interrupciones ON\n");
     printk("----------------------------------------\n");
-    printk("  Mira la ventana de VIDEO de QEMU\n");
-    printk("  Teclas: 1-5 dock | ESC = Terminal\n");
+    printk("  Mouse + teclado en ventana QEMU\n");
+    printk("  Clic dock | ESC = Terminal\n");
     printk("----------------------------------------\n");
 
-    /*
-     * Run GUI on the boot path (no task switch). The previous approach
-     * created a desktop task that stayed READY while idle monopolized
-     * the CPU, so the GUI never started.
-     */
     printk("[boot] launching GUI now...\n");
     gui_run();
 

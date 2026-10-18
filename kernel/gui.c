@@ -3,17 +3,62 @@
 #include "shell.h"
 #include "gfx.h"
 #include "keyboard.h"
+#include "mouse.h"
 #include "printk.h"
 #include "kernel.h"
 #include "vga.h"
 #include "ata.h"
 #include "diskfs.h"
 #include "timer.h"
-#include "task.h"
 #include "string.h"
 
 static int panel;
 static int dock_sel;
+
+/* cursor underlay */
+#define CUR_W 8
+#define CUR_H 10
+static uint8_t cur_under[CUR_W * CUR_H];
+static int cur_sx = -1, cur_sy = -1;
+
+static void cursor_save(int x, int y) {
+    for (int j = 0; j < CUR_H; j++)
+        for (int i = 0; i < CUR_W; i++)
+            cur_under[j * CUR_W + i] = gfx_getpixel(x + i, y + j);
+    cur_sx = x;
+    cur_sy = y;
+}
+
+static void cursor_restore(void) {
+    if (cur_sx < 0)
+        return;
+    for (int j = 0; j < CUR_H; j++)
+        for (int i = 0; i < CUR_W; i++)
+            gfx_putpixel(cur_sx + i, cur_sy + j, cur_under[j * CUR_W + i]);
+    cur_sx = cur_sy = -1;
+}
+
+static void cursor_draw(int x, int y) {
+    cursor_restore();
+    cursor_save(x, y);
+    /* simple arrow */
+    static const char *shape[10] = {
+        "X.......",
+        "XX......",
+        "X.X.....",
+        "X..X....",
+        "X...X...",
+        "X....X..",
+        "X..XXXXX",
+        "X.X.....",
+        "XX......",
+        "X.......",
+    };
+    for (int j = 0; j < CUR_H; j++)
+        for (int i = 0; i < CUR_W; i++)
+            if (shape[j][i] == 'X')
+                gfx_putpixel(x + i, y + j, GFX_WHITE);
+}
 
 static void draw_wallpaper(void) {
     for (int y = 0; y < GFX_HEIGHT; y++) {
@@ -110,9 +155,9 @@ static void draw_content(void) {
         gfx_text(cx, cy + 16, "hello.elf", GFX_DARK_GREY, GFX_WHITE);
         gfx_text(cx, cy + 28, "echo.elf", GFX_DARK_GREY, GFX_WHITE);
         gfx_text(cx, cy + 40, "cat.elf   ls.elf", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(cx, cy + 60, "Dock 5 = Terminal", GFX_LIGHT_BLUE, GFX_WHITE);
-        gfx_text(cx, cy + 74, "ESC = Terminal", GFX_LIGHT_BLUE, GFX_WHITE);
-        gfx_text(cx, cy + 96, "Focus QEMU video", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(cx, cy + 60, "Click dock icons", GFX_LIGHT_BLUE, GFX_WHITE);
+        gfx_text(cx, cy + 74, "T = Terminal", GFX_LIGHT_BLUE, GFX_WHITE);
+        gfx_text(cx, cy + 96, "Mouse enabled", GFX_DARK_GREY, GFX_WHITE);
     } else if (panel == 1) {
         gfx_text(cx, cy, "Storage", GFX_BLACK, GFX_WHITE);
         if (!ata_present()) {
@@ -124,14 +169,12 @@ static void draw_content(void) {
             gfx_text(cx, cy + 20, "SFS Mounted", GFX_GREEN, GFX_WHITE);
             gfx_text(cx, cy + 34, "dls / dcat", GFX_DARK_GREY, GFX_WHITE);
         }
-        gfx_text(cx, cy + 60, "Ramfs: ls / cat", GFX_DARK_GREY, GFX_WHITE);
     } else {
         gfx_text(cx, cy, "About This Mac", GFX_BLACK, GFX_WHITE);
         gfx_text(cx, cy + 18, SIF_KERNEL_NAME, GFX_DARK_GREY, GFX_WHITE);
         gfx_text(cx, cy + 32, SIF_KERNEL_VERSION, GFX_LIGHT_BLUE, GFX_WHITE);
-        gfx_text(cx, cy + 52, "Boots to desktop", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(cx, cy + 52, "PS/2 mouse ON", GFX_DARK_GREY, GFX_WHITE);
         gfx_text(cx, cy + 66, "i386  Hobby OS", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(cx, cy + 90, "Inspired by Mac OS", GFX_DARK_GREY, GFX_WHITE);
     }
 }
 
@@ -146,119 +189,167 @@ static void dock_icon(int x, int y, uint8_t color, const char *label, int select
         gfx_char(x + 8, y + 6, label[0], GFX_WHITE, color);
 }
 
+/* dock geometry — shared with hit-test */
+static int dock_x, dock_y, dock_ix, dock_iy;
+
 static void draw_dock(void) {
-    int dock_y = GFX_HEIGHT - 32;
+    dock_y = GFX_HEIGHT - 32;
     int dock_h = 30;
     int dock_w = 200;
-    int dock_x = (GFX_WIDTH - dock_w) / 2;
+    dock_x = (GFX_WIDTH - dock_w) / 2;
 
     gfx_fillrect(dock_x, dock_y, dock_w, dock_h, GFX_LIGHT_GREY);
     gfx_rect(dock_x, dock_y, dock_w, dock_h, GFX_WHITE);
     gfx_hline(dock_x, dock_y, dock_w, GFX_DARK_GREY);
 
-    int ix = dock_x + 12;
-    int iy = dock_y + 4;
-    dock_icon(ix, iy, GFX_LIGHT_BLUE, "A", dock_sel == 0);
-    dock_icon(ix + 36, iy, GFX_BROWN, "D", dock_sel == 1);
-    dock_icon(ix + 72, iy, GFX_MAGENTA, "i", dock_sel == 2);
-    dock_icon(ix + 108, iy, GFX_BLUE, "B", dock_sel == 3);
-    dock_icon(ix + 144, iy, GFX_DARK_GREY, "T", dock_sel == 4);
+    dock_ix = dock_x + 12;
+    dock_iy = dock_y + 4;
+    dock_icon(dock_ix, dock_iy, GFX_LIGHT_BLUE, "A", dock_sel == 0);
+    dock_icon(dock_ix + 36, dock_iy, GFX_BROWN, "D", dock_sel == 1);
+    dock_icon(dock_ix + 72, dock_iy, GFX_MAGENTA, "i", dock_sel == 2);
+    dock_icon(dock_ix + 108, dock_iy, GFX_BLUE, "B", dock_sel == 3);
+    dock_icon(dock_ix + 144, dock_iy, GFX_DARK_GREY, "T", dock_sel == 4);
 
     for (int i = 0; i < 5; i++) {
-        int dx = ix + i * 36 + 10;
+        int dx = dock_ix + i * 36 + 10;
         if (i == dock_sel)
             gfx_fillrect(dx, dock_y + 26, 4, 2, GFX_WHITE);
     }
 }
 
 static void draw_desktop(void) {
+    cur_sx = cur_sy = -1; /* full redraw invalidates underlay */
     draw_wallpaper();
     draw_menubar();
     draw_content();
     draw_dock();
 }
 
+/* returns: -1 none, 0-4 dock, 10-13 sidebar Apps/Disk/About/BIOS */
+static int hit_test(int x, int y) {
+    for (int i = 0; i < 5; i++) {
+        int ix = dock_ix + i * 36;
+        if (x >= ix && x < ix + 24 && y >= dock_iy && y < dock_iy + 20)
+            return i;
+    }
+    /* sidebar items */
+    int sx = 26, sy0 = 56;
+    for (int i = 0; i < 4; i++) {
+        int sy = sy0 + i * 14;
+        if (x >= sx && x < sx + 72 && y >= sy && y < sy + 12)
+            return 10 + i;
+    }
+    /* red traffic close */
+    if (x >= 30 && x < 37 && y >= 26 && y < 33)
+        return 99;
+    return -1;
+}
+
+static int activate(int id) {
+    if (id >= 0 && id <= 2) {
+        panel = id;
+        dock_sel = id;
+        draw_desktop();
+        return 0;
+    }
+    if (id == 3 || id == 13) {
+        dock_sel = 3;
+        draw_desktop();
+        cursor_restore();
+        gfx_restore_text();
+        bios_run();
+        gfx_init_mode13();
+        draw_desktop();
+        return 0;
+    }
+    if (id == 4 || id == 99)
+        return 1; /* exit GUI */
+    if (id >= 10 && id <= 12) {
+        panel = id - 10;
+        dock_sel = panel;
+        draw_desktop();
+    }
+    return 0;
+}
+
 void gui_run(void) {
-    printk("[gui] entering Aqua desktop\n");
-    printk("[gui] FOCUS the QEMU video window\n");
+    printk("[gui] Aqua + mouse\n");
 
     panel = 0;
     dock_sel = 0;
 
     gfx_init_mode13();
     draw_desktop();
-    printk("[gui] desktop drawn — keys: 1-5 ESC\n");
 
-    uint32_t last_beat = timer_seconds();
+    struct mouse_state ms;
+    mouse_get(&ms);
+    cursor_draw(ms.x, ms.y);
+    printk("[gui] cursor at %d,%d\n", ms.x, ms.y);
 
     for (;;) {
-        uint32_t now = timer_seconds();
-        if (now != last_beat) {
-            last_beat = now;
-            printk("[gui] alive %us\n", now);
+        int redraw_cursor = 0;
+        int quit = 0;
+
+        if (mouse_moved()) {
+            mouse_get(&ms);
+            mouse_clear_edges();
+            cursor_draw(ms.x, ms.y);
+            redraw_cursor = 1;
+
+            if (ms.left_pressed) {
+                int id = hit_test(ms.x, ms.y);
+                printk("[gui] click %d,%d -> %d\n", ms.x, ms.y, id);
+                if (id >= 0) {
+                    cursor_restore();
+                    if (activate(id))
+                        quit = 1;
+                    else {
+                        mouse_get(&ms);
+                        cursor_draw(ms.x, ms.y);
+                    }
+                }
+            }
+        } else {
+            mouse_clear_edges();
         }
 
-        if (!keyboard_has_input()) {
-            __asm__ volatile("hlt");
-            continue;
-        }
-        int ch = keyboard_read_char();
-        if (!ch)
-            continue;
-
-        printk("[gui] key %d\n", ch);
-
-        if (ch == 27 || ch == 'q' || ch == 'Q')
-            break;
-
-        if (ch == '1') {
-            panel = 0;
-            dock_sel = 0;
-            draw_desktop();
-        } else if (ch == '2') {
-            panel = 1;
-            dock_sel = 1;
-            draw_desktop();
-        } else if (ch == '3') {
-            panel = 2;
-            dock_sel = 2;
-            draw_desktop();
-        } else if (ch == '4' || ch == 'b' || ch == 'B') {
-            dock_sel = 3;
-            draw_desktop();
-            gfx_restore_text();
-            bios_run();
-            gfx_init_mode13();
-            draw_desktop();
-        } else if (ch == '5') {
-            dock_sel = 4;
-            draw_desktop();
-            break;
-        } else if (ch == 'a' || ch == 'A') {
-            dock_sel = (dock_sel + 4) % 5;
-            if (dock_sel < 3)
-                panel = dock_sel;
-            draw_desktop();
-        } else if (ch == 'd' || ch == 'D') {
-            dock_sel = (dock_sel + 1) % 5;
-            if (dock_sel < 3)
-                panel = dock_sel;
-            draw_desktop();
-        } else if (ch == '\n' || ch == '\r') {
-            if (dock_sel == 3) {
-                gfx_restore_text();
-                bios_run();
-                gfx_init_mode13();
-                draw_desktop();
-            } else if (dock_sel == 4) {
-                break;
-            } else {
-                panel = dock_sel;
-                draw_desktop();
+        if (keyboard_has_input()) {
+            int ch = keyboard_read_char();
+            if (ch == 27 || ch == 'q' || ch == 'Q')
+                quit = 1;
+            else if (ch == '1') {
+                cursor_restore();
+                activate(0);
+                mouse_get(&ms);
+                cursor_draw(ms.x, ms.y);
+            } else if (ch == '2') {
+                cursor_restore();
+                activate(1);
+                mouse_get(&ms);
+                cursor_draw(ms.x, ms.y);
+            } else if (ch == '3') {
+                cursor_restore();
+                activate(2);
+                mouse_get(&ms);
+                cursor_draw(ms.x, ms.y);
+            } else if (ch == '4' || ch == 'b' || ch == 'B') {
+                cursor_restore();
+                activate(3);
+                mouse_get(&ms);
+                cursor_draw(ms.x, ms.y);
+            } else if (ch == '5') {
+                quit = 1;
             }
         }
+
+        if (quit)
+            break;
+
+        if (!redraw_cursor && !keyboard_has_input() && !mouse_moved())
+            __asm__ volatile("hlt");
     }
 
+    cursor_restore();
     gfx_restore_text();
     vga_init();
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);

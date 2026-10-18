@@ -1,28 +1,20 @@
-# SIF Kernel v1.11.0-bootgui
+# SIF Kernel v1.12.0-mouse
 
-Arranca **directo al escritorio Aqua** (estilo Mac).
+Escritorio Aqua con **mouse PS/2**.
 
 ```bash
 git fetch origin && git reset --hard origin/main
 make clean && make && make run
 ```
 
-## Al boot
-1. Inicializa el kernel (texto breve en serial)
-2. Entra al **escritorio grafico**
+## Mouse
+- Cursor blanco en pantalla
+- Clic en dock: Apps / Disk / About / BIOS / Terminal
+- Clic en sidebar Favorites
+- Clic en semaforo rojo = salir a shell
 
-## Controles desktop
-| Tecla | Accion |
-|-------|--------|
-| **1-3** | Apps / Disk / About |
-| **4** | BIOS setup |
-| **5** o **ESC** | Terminal (shell) |
-| **A/D** | Dock |
-| **Enter** | Abrir |
+## Teclado (sigue activo)
+1-5, ESC, A/D
 
-## Desde la shell
-```
-gui     # volver al escritorio
-bios    # setup azul
-exec hello.elf
-```
+En QEMU: haz clic en la ventana de video para capturar el mouse
+(Ctrl+Alt+G para liberar).
