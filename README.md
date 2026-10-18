@@ -1,20 +1,22 @@
-# SIF Kernel v1.12.0-mouse
+# SIF Kernel v1.13.0-aqua2
 
-Escritorio Aqua con **mouse PS/2**.
+Escritorio **estilo Mac OS X** (Aqua 2) + mouse PS/2 + RTC en barra.
 
 ```bash
 git fetch origin && git reset --hard origin/main
 make clean && make && make run
 ```
 
-## Mouse
-- Cursor blanco en pantalla
-- Clic en dock: Apps / Disk / About / BIOS / Terminal
-- Clic en sidebar Favorites
-- Clic en semaforo rojo = salir a shell
+## GUI
+- Menu Apple (clic en S)
+- Finder con sidebar e iconos de apps
+- Dock con brillo y separador
+- Iconos de escritorio (Disk / Trash)
+- Reloj real (CMOS RTC)
 
-## Teclado (sigue activo)
-1-5, ESC, A/D
-
-En QEMU: haz clic en la ventana de video para capturar el mouse
-(Ctrl+Alt+G para liberar).
+## Controles
+| Accion | Como |
+|--------|------|
+| Mouse | Clic dock / sidebar / Apple |
+| 1-4 | Apps Disk About BIOS |
+| 5 / ESC | Terminal |
