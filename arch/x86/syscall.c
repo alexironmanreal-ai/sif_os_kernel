@@ -10,9 +10,12 @@
 #include "paging.h"
 #include "string.h"
 #include "userland.h"
+#include "uaccess.h"
 
 #define USER_BRK_START 0x08100000u
 #define USER_BRK_MAX   0x08F00000u
+#define SYS_IO_MAX     4096u
+#define SYS_SLEEP_MAX  60000u
 
 uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
     switch (num) {
@@ -27,10 +30,21 @@ uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
         }
         return 0;
 
-    case SYS_WRITE:
-        if (c > 0x10000)
-            c = 0x10000;
-        return (uint32_t)vfs_write((int)a, (const void *)b, c);
+    case SYS_WRITE: {
+        if (c == 0)
+            return 0;
+        if (c > SYS_IO_MAX)
+            c = SYS_IO_MAX;
+        if (!access_ok((const void *)b, c))
+            return (uint32_t)-1;
+        /* copy to kernel buffer so user cannot change mid-write */
+        {
+            char kbuf[SYS_IO_MAX];
+            if (copy_from_user(kbuf, (const void *)b, c) < 0)
+                return (uint32_t)-1;
+            return (uint32_t)vfs_write((int)a, kbuf, c);
+        }
+    }
 
     case SYS_YIELD:
         task_yield();
@@ -42,6 +56,8 @@ uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
     }
 
     case SYS_SLEEP:
+        if (a > SYS_SLEEP_MAX)
+            a = SYS_SLEEP_MAX;
         task_sleep_ms(a);
         return 0;
 
@@ -51,25 +67,50 @@ uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
         return (uint32_t)t.second + t.minute * 60u + t.hour * 3600u;
     }
 
-    case SYS_OPEN:
-        return (uint32_t)vfs_open((const char *)a, (int)b);
+    case SYS_OPEN: {
+        char path[PROC_PATH_LEN];
+        if (copy_path_from_user(path, sizeof(path), (const char *)a) < 0)
+            return (uint32_t)-1;
+        return (uint32_t)vfs_open(path, (int)b);
+    }
 
-    case SYS_READ:
-        if (c > 0x10000)
-            c = 0x10000;
-        return (uint32_t)vfs_read((int)a, (void *)b, c);
+    case SYS_READ: {
+        if (c == 0)
+            return 0;
+        if (c > SYS_IO_MAX)
+            c = SYS_IO_MAX;
+        if (!access_ok((void *)b, c))
+            return (uint32_t)-1;
+        {
+            char kbuf[SYS_IO_MAX];
+            int n = vfs_read((int)a, kbuf, c);
+            if (n < 0)
+                return (uint32_t)-1;
+            if (n > 0 && copy_to_user((void *)b, kbuf, (uint32_t)n) < 0)
+                return (uint32_t)-1;
+            return (uint32_t)n;
+        }
+    }
 
     case SYS_CLOSE:
         return (uint32_t)vfs_close((int)a);
 
-    case SYS_KILL:
-        return (uint32_t)task_kill((int)a);
+    case SYS_KILL: {
+        int pid = (int)a;
+        if (pid <= 0)
+            return (uint32_t)-1; /* never kill idle / invalid */
+        return (uint32_t)task_kill(pid);
+    }
 
     case SYS_WAIT: {
         int st = 0;
         int pid = task_wait((int)a, &st);
-        if (b)
-            *(int *)b = st;
+        if (b) {
+            if (!access_ok((void *)b, sizeof(int)))
+                return (uint32_t)-1;
+            if (copy_to_user((void *)b, &st, sizeof(int)) < 0)
+                return (uint32_t)-1;
+        }
         return (uint32_t)pid;
     }
 
@@ -96,8 +137,14 @@ uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
         }
         if (a == 0)
             return t->brk;
+        /* only grow within heap window; no shrink below mapped start */
         if (a < USER_BRK_START || a > USER_BRK_MAX)
             return t->brk;
+        if (a < t->brk) {
+            /* allow shrink of break pointer but keep pages (simple) */
+            t->brk = a;
+            return t->brk;
+        }
         while (t->brk_mapped < a) {
             uint32_t frame = pmm_alloc_frame();
             if (!frame)
@@ -111,21 +158,35 @@ uint32_t syscall_dispatch(uint32_t num, uint32_t a, uint32_t b, uint32_t c) {
         return t->brk;
     }
 
-    case SYS_GETDENTS:
-        if (!a || b == 0 || b > 0x10000)
+    case SYS_GETDENTS: {
+        if (b == 0 || b > SYS_IO_MAX)
             return (uint32_t)-1;
-        return (uint32_t)fs_getdents((char *)a, b);
+        if (!access_ok((void *)a, b))
+            return (uint32_t)-1;
+        {
+            char kbuf[SYS_IO_MAX];
+            int n = fs_getdents(kbuf, b);
+            if (n < 0)
+                return (uint32_t)-1;
+            if ((uint32_t)n > b)
+                n = (int)b;
+            if (n > 0 && copy_to_user((void *)a, kbuf, (uint32_t)n) < 0)
+                return (uint32_t)-1;
+            return (uint32_t)n;
+        }
+    }
 
     default:
-        printk("[sys] ? %u\n", num);
+        printk("[sys] denied unknown %u\n", num);
         return (uint32_t)-1;
     }
 }
 
 void syscall_init(void) {
     extern void isr_syscall(void);
+    /* DPL=3: user may call; type 0xEE = interrupt gate */
     idt_set_gate(0x80, (uint32_t)isr_syscall, 0x08, 0xEE);
-    printk("[sys] int 0x80 async-ready\n");
+    printk("[sys] int 0x80 hardened + uaccess\n");
 }
 
 void sys_write(const char *s) {

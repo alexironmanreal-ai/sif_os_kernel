@@ -6,8 +6,8 @@
 #include "vga.h"
 #include "serial.h"
 #include "task.h"
+#include "uaccess.h"
 
-/* kernel/shell global FD table */
 static struct proc_fd kfds[VFS_MAX_FD];
 
 static struct proc_fd *fd_table(void) {
@@ -35,11 +35,11 @@ void vfs_init(void) {
     kfds[2].kind = FD_SPECIAL;
     kfds[2].special_id = 2;
     kfds[2].writable = 1;
-    printk("[vfs] kernel fd 0/1/2 + per-process tables\n");
+    printk("[vfs] hardened fd tables\n");
 }
 
 int vfs_open(const char *path, int write) {
-    if (!path || !path[0])
+    if (!path_ok(path))
         return -1;
     if (!write && !fs_exists(path))
         return -1;
@@ -72,17 +72,20 @@ int vfs_close(int fd) {
     if (fd < 0 || fd >= VFS_MAX_FD || !fds[fd].used)
         return -1;
     if (fd <= 2)
-        return 0;
+        return 0; /* stdin/out/err stay open */
     fds[fd].used = 0;
     fds[fd].name[0] = 0;
     fds[fd].offset = 0;
+    fds[fd].writable = 0;
     return 0;
 }
 
 int vfs_read(int fd, void *buf, uint32_t n) {
     struct proc_fd *fds = fd_table();
-    if (fd < 0 || fd >= VFS_MAX_FD || !fds[fd].used || !n)
+    if (fd < 0 || fd >= VFS_MAX_FD || !fds[fd].used || !buf || !n)
         return -1;
+    if (n > 4096)
+        n = 4096;
 
     if (fds[fd].kind == FD_SPECIAL && fds[fd].special_id == 0) {
         uint8_t *out = (uint8_t *)buf;
@@ -119,10 +122,14 @@ int vfs_read(int fd, void *buf, uint32_t n) {
 
 int vfs_write(int fd, const void *buf, uint32_t n) {
     struct proc_fd *fds = fd_table();
-    if (fd < 0 || fd >= VFS_MAX_FD || !fds[fd].used)
+    if (fd < 0 || fd >= VFS_MAX_FD || !fds[fd].used || !buf)
         return -1;
+    if (n > 4096)
+        n = 4096;
 
     if (fds[fd].kind == FD_SPECIAL) {
+        if (!fds[fd].writable)
+            return -1;
         if (fds[fd].special_id == 1 || fds[fd].special_id == 2) {
             const char *p = (const char *)buf;
             for (uint32_t i = 0; i < n; i++) {
@@ -140,6 +147,8 @@ int vfs_write(int fd, const void *buf, uint32_t n) {
     uint8_t old[4096];
     uint32_t osz = 0;
     fs_read(fds[fd].name, old, sizeof(old), &osz);
+    if (osz >= sizeof(old))
+        return -1;
     if (osz + n > sizeof(old))
         n = sizeof(old) - osz;
     memcpy(old + osz, buf, n);
