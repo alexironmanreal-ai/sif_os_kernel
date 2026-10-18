@@ -15,6 +15,7 @@
 #include "task.h"
 #include "syscall.h"
 #include "shell.h"
+#include "gui.h"
 #include "ata.h"
 #include "fs.h"
 #include "diskfs.h"
@@ -69,15 +70,12 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
 
     __asm__ volatile("sti");
     printk("[ok] interrupciones ON\n");
-    printk("----------------------------------------\n");
-    printk("exec=async  run=sync  wait  gui\n");
-    printk("----------------------------------------\n\n");
+    printk("[boot] starting desktop (GUI)...\n");
 
-    /* Shell as a real task so wait/spawn work */
-    if (task_create("shell", shell_task) < 0)
-        panic("no shell task");
+    /* Primary session: Aqua desktop first (shell via Terminal) */
+    if (task_create("desktop", gui_task) < 0)
+        panic("no desktop task");
 
-    /* Enter scheduler — never returns to here */
     for (;;) {
         schedule();
         __asm__ volatile("sti; hlt");

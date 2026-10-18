@@ -1,28 +1,28 @@
-# SIF Kernel v1.10.0-aqua
+# SIF Kernel v1.11.0-bootgui
 
-## GUI estilo Mac (Aqua)
-- Barra de menu superior
-- Ventana tipo Finder (semaforos rojo/amarillo/verde)
-- Sidebar + contenido
-- Dock inferior
+Arranca **directo al escritorio Aqua** (estilo Mac).
 
 ```bash
 git fetch origin && git reset --hard origin/main
 make clean && make && make run
 ```
 
-```
-SIF> gui
-```
+## Al boot
+1. Inicializa el kernel (texto breve en serial)
+2. Entra al **escritorio grafico**
 
+## Controles desktop
 | Tecla | Accion |
 |-------|--------|
-| **1** | Apps |
-| **2** | Disk |
-| **3** | About |
+| **1-3** | Apps / Disk / About |
 | **4** | BIOS setup |
-| **5** / **ESC** | Volver a shell |
-| **A/D** | Mover en el dock |
-| **Enter** | Abrir item del dock |
+| **5** o **ESC** | Terminal (shell) |
+| **A/D** | Dock |
+| **Enter** | Abrir |
 
-Tambien: `bios` directo desde shell.
+## Desde la shell
+```
+gui     # volver al escritorio
+bios    # setup azul
+exec hello.elf
+```
