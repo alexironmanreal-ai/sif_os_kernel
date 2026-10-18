@@ -9,12 +9,8 @@
 #include "ata.h"
 #include "diskfs.h"
 #include "timer.h"
+#include "task.h"
 #include "string.h"
-
-/*
- * SIF Aqua — Mac OS inspired desktop (320x200 mode 13h)
- * Boots as primary UI. Terminal (5/ESC) drops to shell.
- */
 
 static int panel;
 static int dock_sel;
@@ -115,8 +111,8 @@ static void draw_content(void) {
         gfx_text(cx, cy + 28, "echo.elf", GFX_DARK_GREY, GFX_WHITE);
         gfx_text(cx, cy + 40, "cat.elf   ls.elf", GFX_DARK_GREY, GFX_WHITE);
         gfx_text(cx, cy + 60, "Dock 5 = Terminal", GFX_LIGHT_BLUE, GFX_WHITE);
-        gfx_text(cx, cy + 74, "Then: exec hello.elf", GFX_LIGHT_BLUE, GFX_WHITE);
-        gfx_text(cx, cy + 96, "type gui to return", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(cx, cy + 74, "ESC = Terminal", GFX_LIGHT_BLUE, GFX_WHITE);
+        gfx_text(cx, cy + 96, "Click QEMU video win", GFX_DARK_GREY, GFX_WHITE);
     } else if (panel == 1) {
         gfx_text(cx, cy, "Storage", GFX_BLACK, GFX_WHITE);
         if (!ata_present()) {
@@ -134,7 +130,7 @@ static void draw_content(void) {
         gfx_text(cx, cy + 18, SIF_KERNEL_NAME, GFX_DARK_GREY, GFX_WHITE);
         gfx_text(cx, cy + 32, SIF_KERNEL_VERSION, GFX_LIGHT_BLUE, GFX_WHITE);
         gfx_text(cx, cy + 52, "Boots to desktop", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(cx, cy + 66, "i386  ·  Hobby OS", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(cx, cy + 66, "i386  Hobby OS", GFX_DARK_GREY, GFX_WHITE);
         gfx_text(cx, cy + 90, "Inspired by Mac OS", GFX_DARK_GREY, GFX_WHITE);
     }
 }
@@ -183,14 +179,32 @@ static void draw_desktop(void) {
 }
 
 void gui_run(void) {
-    printk("[gui] desktop (boot UI) - 5/ESC = Terminal\n");
+    printk("[gui] entering Aqua desktop\n");
+    printk("[gui] FOCUS the QEMU *video* window\n");
+    printk("[gui] keys: 1-5  ESC=shell\n");
+
     panel = 0;
     dock_sel = 0;
 
     gfx_init_mode13();
     draw_desktop();
+    printk("[gui] desktop drawn — waiting keys\n");
+
+    uint32_t last_beat = timer_seconds();
 
     for (;;) {
+        if (task_needs_resched()) {
+            task_clear_resched();
+            task_yield();
+        }
+
+        /* serial heartbeat so the log does not look frozen */
+        uint32_t now = timer_seconds();
+        if (now != last_beat) {
+            last_beat = now;
+            printk("[gui] alive %us (ESC=shell)\n", now);
+        }
+
         if (!keyboard_has_input()) {
             __asm__ volatile("hlt");
             continue;
@@ -198,6 +212,8 @@ void gui_run(void) {
         int ch = keyboard_read_char();
         if (!ch)
             continue;
+
+        printk("[gui] key %d\n", ch);
 
         if (ch == 27 || ch == 'q' || ch == 'Q')
             break;
@@ -254,14 +270,14 @@ void gui_run(void) {
     vga_init();
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     vga_clear();
-    printk("[gui] Terminal mode — type 'gui' for desktop\n");
+    printk("[gui] Terminal — type 'gui' to return\n");
 }
 
-/* Session loop: desktop <-> shell */
 void gui_task(void) {
+    printk("[desktop] task running\n");
+    task_yield();
     for (;;) {
         gui_run();
         shell_run();
-        /* shell_run only returns if we later make it return; for now infinite */
     }
 }

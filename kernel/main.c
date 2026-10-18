@@ -70,9 +70,13 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
 
     __asm__ volatile("sti");
     printk("[ok] interrupciones ON\n");
-    printk("[boot] starting desktop (GUI)...\n");
+    printk("----------------------------------------\n");
+    printk("  Abre la VENTANA de video de QEMU\n");
+    printk("  (no solo esta terminal serial)\n");
+    printk("  Teclas: 1-5 dock | ESC = Terminal\n");
+    printk("----------------------------------------\n");
+    printk("[boot] starting desktop...\n");
 
-    /* Primary session: Aqua desktop first (shell via Terminal) */
     if (task_create("desktop", gui_task) < 0)
         panic("no desktop task");
 
