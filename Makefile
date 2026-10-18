@@ -30,7 +30,6 @@ clean:
 run: $(KERNEL) disk
 	qemu-system-i386 -kernel $(KERNEL) -serial stdio -m 64M \
 		-drive file=$(DISK),format=raw,if=ide \
-		-device mouse \
 		-no-reboot -no-shutdown
 iso: $(KERNEL)
 	mkdir -p iso_tmp/boot/grub
