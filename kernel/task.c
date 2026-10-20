@@ -5,6 +5,7 @@
 #include "string.h"
 #include "paging.h"
 #include "gdt.h"
+#include "security.h"
 
 extern void context_switch(struct cpu_context *old, struct cpu_context *new);
 extern void enter_usermode(uint32_t eip, uint32_t esp);
@@ -15,8 +16,6 @@ static int task_count = 0;
 static int need_resched = 0;
 static int quantum_left = 0;
 #define QUANTUM 5
-
-#define USER_BRK_START 0x08100000u
 
 static void user_trampoline(void);
 
@@ -67,8 +66,9 @@ void task_init_stdio(struct task *t) {
     t->fds[2].kind = 1;
     t->fds[2].special_id = 2;
     t->fds[2].writable = 1;
-    t->brk = USER_BRK_START;
-    t->brk_mapped = USER_BRK_START;
+    /* default; user tasks overwrite with ASLR */
+    t->brk = 0x08100000u;
+    t->brk_mapped = 0x08100000u;
 }
 
 void task_close_all_fds(struct task *t) {
@@ -79,12 +79,6 @@ void task_close_all_fds(struct task *t) {
         t->fds[i].name[0] = 0;
         t->fds[i].offset = 0;
     }
-}
-
-void task_set_ready(int id) {
-    if (id >= 0 && id < MAX_TASKS &&
-        (tasks[id].state == TASK_BLOCKED || tasks[id].state == TASK_SLEEPING))
-        tasks[id].state = TASK_READY;
 }
 
 void task_switch_address_space(struct task *t) {
@@ -179,6 +173,10 @@ int task_create_user(const char *name, uint32_t cr3, uint32_t entry,
     t->user_esp = user_esp;
     t->parent = current_id;
     task_init_stdio(t);
+    /* ASLR heap base */
+    uint32_t b = aslr_brk_start();
+    t->brk = b;
+    t->brk_mapped = b;
 
     if (!t->kstack) {
         t->kstack = (uint32_t *)kmalloc_a(TASK_KSTACK_SIZE);
@@ -202,24 +200,19 @@ void task_exit_code(int code) {
         struct task *t = &tasks[current_id];
         t->exit_code = code;
         t->state = TASK_ZOMBIE;
-
         task_close_all_fds(t);
-
         if (t->cr3 && t->cr3 != paging_kernel_pd()) {
             uint32_t doomed = t->cr3;
             t->cr3 = 0;
             paging_switch(paging_kernel_pd());
             paging_destroy_address_space(doomed);
         }
-
         int p = t->parent;
         if (p >= 0 && p < MAX_TASKS && tasks[p].state == TASK_BLOCKED)
             tasks[p].state = TASK_READY;
-
         if (t->wait_parent >= 0 && t->wait_parent < MAX_TASKS &&
             tasks[t->wait_parent].state == TASK_BLOCKED)
             tasks[t->wait_parent].state = TASK_READY;
-
         for (int i = 0; i < MAX_TASKS; i++) {
             if (tasks[i].state == TASK_BLOCKED &&
                 (tasks[i].waiting_on == current_id || tasks[i].waiting_on == -1))
@@ -261,7 +254,6 @@ int task_kill(int pid) {
     tasks[pid].exit_code = -9;
     tasks[pid].state = TASK_ZOMBIE;
     task_close_all_fds(&tasks[pid]);
-
     if (tasks[pid].cr3 && tasks[pid].cr3 != paging_kernel_pd()) {
         uint32_t doomed = tasks[pid].cr3;
         tasks[pid].cr3 = 0;
@@ -272,7 +264,6 @@ int task_kill(int pid) {
         else
             paging_switch(saved);
     }
-
     for (int i = 0; i < MAX_TASKS; i++) {
         if (tasks[i].state == TASK_BLOCKED &&
             (tasks[i].waiting_on == pid || tasks[i].waiting_on == -1))
@@ -281,7 +272,6 @@ int task_kill(int pid) {
     int p = tasks[pid].parent;
     if (p >= 0 && p < MAX_TASKS && tasks[p].state == TASK_BLOCKED)
         tasks[p].state = TASK_READY;
-
     if (pid == current_id)
         schedule();
     return 0;
@@ -341,18 +331,15 @@ void schedule(void) {
 
     int next = -1;
     int start = (current_id < 0) ? 0 : (current_id + 1);
-
-    /* Prefer non-idle READY tasks so idle does not starve the system */
     for (int n = 0; n < MAX_TASKS; n++) {
         int i = (start + n) % MAX_TASKS;
         if (tasks[i].state != TASK_READY)
             continue;
         if (i == 0 && task_count > 1)
-            continue; /* skip idle if something else is ready */
+            continue;
         next = i;
         break;
     }
-    /* fallback: idle */
     if (next < 0) {
         for (int n = 0; n < MAX_TASKS; n++) {
             int i = (start + n) % MAX_TASKS;
@@ -362,7 +349,6 @@ void schedule(void) {
             }
         }
     }
-
     if (next < 0) {
         if (current_id >= 0 &&
             (tasks[current_id].state == TASK_RUNNING ||
@@ -380,9 +366,9 @@ void schedule(void) {
 
     static struct cpu_context boot_ctx;
     struct cpu_context *old_ctx;
-    if (current_id < 0) {
+    if (current_id < 0)
         old_ctx = &boot_ctx;
-    } else {
+    else {
         if (tasks[current_id].state == TASK_RUNNING)
             tasks[current_id].state = TASK_READY;
         old_ctx = &tasks[current_id].ctx;
@@ -392,9 +378,7 @@ void schedule(void) {
     int prev = current_id;
     current_id = next;
     quantum_left = QUANTUM;
-
     task_switch_address_space(&tasks[next]);
-
     if (prev == next)
         return;
     context_switch(old_ctx, &tasks[next].ctx);
@@ -428,12 +412,12 @@ void task_list(void) {
             continue;
         const char *st = "?";
         switch (tasks[i].state) {
-        case TASK_READY:    st = "READY   "; break;
-        case TASK_RUNNING:  st = "RUNNING "; break;
-        case TASK_BLOCKED:  st = "BLOCKED "; break;
+        case TASK_READY: st = "READY   "; break;
+        case TASK_RUNNING: st = "RUNNING "; break;
+        case TASK_BLOCKED: st = "BLOCKED "; break;
         case TASK_SLEEPING: st = "SLEEPING"; break;
-        case TASK_ZOMBIE:   st = "ZOMBIE  "; break;
-        case TASK_DEAD:     st = "DEAD    "; break;
+        case TASK_ZOMBIE: st = "ZOMBIE  "; break;
+        case TASK_DEAD: st = "DEAD    "; break;
         default: break;
         }
         printk("%2d %s %5u %08x %c %08x %s\n", i, st, tasks[i].ticks_ran,

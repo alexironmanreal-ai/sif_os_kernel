@@ -30,6 +30,7 @@
 #include "vfs.h"
 #include "cpu.h"
 #include "smoke.h"
+#include "security.h"
 
 void panic(const char *msg) {
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_RED);
@@ -52,8 +53,6 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     printk("========================================\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
-    printk("[boot] higher-half VMA=%x\n", KERNEL_VMA);
-
     if (multiboot_ok()) {
         printk("[boot] %s\n", multiboot_loader_name());
         if (!multiboot_is_v2() && multiboot_cmdline()[0])
@@ -62,7 +61,6 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
         printk("[boot] bad magic=%x\n", magic);
         mbi = 0;
     }
-
     if (multiboot_is_v2())
         mbi = 0;
 
@@ -75,6 +73,7 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     paging_init();
     kmalloc_init();
     timer_init(100);
+    security_init();
     keyboard_init();
     task_init();
     ata_init();
@@ -93,14 +92,16 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     net_init();
     wire_init();
 
+    security_audit();
+
     if (smoke_wanted()) {
-        smoke_note("PASS net-base");
+        smoke_note("PASS sec");
         printk("[smoke] PASS\n");
         smoke_exit(0);
     }
 
     printk("----------------------------------------\n");
-    printk("  net | arp | ping 10.0.2.2\n");
+    printk("  sec | net | ping | spawn\n");
     printk("----------------------------------------\n");
     gui_run();
 
