@@ -1,12 +1,8 @@
 #include "uaccess.h"
+#include "security.h"
 #include "paging.h"
 #include "task.h"
 #include "string.h"
-
-/*
- * Security helpers for ring-3 boundaries.
- * Kernel tasks (shell) may pass kernel pointers; user tasks may not.
- */
 
 static int is_user_task(void) {
     struct task *t = task_current();
@@ -22,15 +18,13 @@ int access_ok(const void *ptr, uint32_t len) {
     uint32_t start = (uint32_t)ptr;
     uint32_t end = start + len;
     if (end < start)
-        return 0; /* overflow */
+        return 0;
 
     if (!is_user_task())
-        return 1; /* kernel context trusted */
+        return 1;
 
-    /* user may only touch [USER_BASE, USER_TOP) */
-    if (start < USER_BASE || end > USER_TOP)
-        return 0;
-    return 1;
+    /* strict: user only in USER_BASE..USER_TOP */
+    return security_user_range_ok(start, len);
 }
 
 int copy_from_user(void *dst, const void *user_src, uint32_t n) {
@@ -68,13 +62,12 @@ int user_strnlen(const char *user_s, uint32_t max) {
             return (int)i;
         i++;
     }
-    return -1; /* not terminated within max */
+    return -1;
 }
 
 int path_ok(const char *path) {
     if (!path || !path[0])
         return 0;
-    /* no absolute paths, no .., no control chars */
     if (path[0] == '/' || path[0] == '\\')
         return 0;
     for (const char *p = path; *p; p++) {
@@ -84,7 +77,6 @@ int path_ok(const char *path) {
         if (c == '/' || c == '\\')
             return 0;
     }
-    /* reject ".." and "." as whole name */
     if (path[0] == '.' && (path[1] == 0 || (path[1] == '.' && path[2] == 0)))
         return 0;
     if (strlen(path) >= PROC_PATH_LEN)
@@ -97,7 +89,6 @@ int copy_path_from_user(char *kbuf, uint32_t kbuf_len, const char *user_path) {
         return -1;
 
     if (!is_user_task()) {
-        /* kernel path */
         if (!user_path || !path_ok(user_path))
             return -1;
         strncpy(kbuf, user_path, kbuf_len - 1);
