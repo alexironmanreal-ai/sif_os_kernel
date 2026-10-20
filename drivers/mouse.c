@@ -7,7 +7,7 @@
 #define PS2_STAT 0x64
 #define SCREEN_W 320
 #define SCREEN_H 200
-#define PS2_TIMEOUT 50000
+#define PS2_TIMEOUT 100000
 
 static volatile int mx = 160, my = 100;
 static volatile int mdx, mdy;
@@ -68,17 +68,14 @@ static int mouse_write(uint8_t data) {
     return ps2_write_data(data);
 }
 
-static void mouse_callback(void) {
-    uint8_t status = inb(PS2_STAT);
-    if (!(status & 1))
+/* Drain one byte from mouse stream (called from IRQ12) */
+static void mouse_handle_byte(uint8_t data) {
+    /* ignore ACKs mid-stream */
+    if (data == 0xFA || data == 0xAA)
         return;
-    if (!(status & 0x20))
-        return;
-
-    uint8_t data = inb(PS2_DATA);
 
     if (cycle == 0 && !(data & 0x08)) {
-        cycle = 0;
+        /* out of sync — drop until bit3 set */
         return;
     }
 
@@ -87,11 +84,15 @@ static void mouse_callback(void) {
         return;
     cycle = 0;
 
+    /* overflow bits */
+    if (packet[0] & 0xC0)
+        return;
+
     int rel_x = (int8_t)packet[1];
     int rel_y = (int8_t)packet[2];
 
     mx += rel_x;
-    my -= rel_y;
+    my -= rel_y; /* PS/2 Y is opposite to screen */
     if (mx < 0)
         mx = 0;
     if (my < 0)
@@ -114,6 +115,20 @@ static void mouse_callback(void) {
     moved = 1;
 }
 
+static void mouse_callback(void) {
+    /*
+     * On IRQ12 always consume available bytes.
+     * Some QEMU builds do not set status AUX bit (0x20).
+     */
+    for (int n = 0; n < 8; n++) {
+        uint8_t status = inb(PS2_STAT);
+        if (!(status & 1))
+            break;
+        uint8_t data = inb(PS2_DATA);
+        mouse_handle_byte(data);
+    }
+}
+
 void mouse_init(void) {
     uint8_t tmp;
 
@@ -129,39 +144,42 @@ void mouse_init(void) {
     printk("[mouse] init...\n");
     ps2_flush();
 
-    /* enable auxiliary device */
+    /* enable aux device interface */
     if (ps2_write_cmd(0xA8) < 0) {
-        printk("[mouse] skip (cmd busy)\n");
+        printk("[mouse] skip (A8)\n");
         return;
     }
 
-    /* read controller config */
-    if (ps2_write_cmd(0x20) < 0) {
-        printk("[mouse] skip (cfg read)\n");
+    /* controller config: IRQ1+IRQ12, clocks on */
+    if (ps2_write_cmd(0x20) < 0 || ps2_read_data(&tmp) < 0) {
+        printk("[mouse] skip (cfg)\n");
         return;
     }
-    if (ps2_read_data(&tmp) < 0) {
-        printk("[mouse] skip (cfg timeout)\n");
-        return;
-    }
-
-    /* IRQ1 + IRQ12 on, keyboard+mouse clocks enabled */
-    tmp |= 0x03;
-    tmp &= (uint8_t)~0x30;
-
+    tmp |= 0x03;           /* IRQ1 + IRQ12 */
+    tmp &= (uint8_t)~0x30; /* enable kbd+mouse clocks */
+    tmp &= (uint8_t)~0x20; /* ensure mouse clock not disabled */
     if (ps2_write_cmd(0x60) < 0 || ps2_write_data(tmp) < 0) {
         printk("[mouse] skip (cfg write)\n");
         return;
     }
 
-    /* enable streaming; ACKs optional */
+    /* reset mouse */
+    mouse_write(0xFF);
+    (void)ps2_read_data(&tmp); /* ACK */
+    (void)ps2_read_data(&tmp); /* BAT */
+    (void)ps2_read_data(&tmp); /* device id */
+
+    /* defaults + enable reporting */
+    mouse_write(0xF6);
+    (void)ps2_read_data(&tmp);
     mouse_write(0xF4);
-    (void)ps2_read_data(&tmp); /* 0xFA if present */
+    (void)ps2_read_data(&tmp);
 
     ps2_flush();
+    cycle = 0;
     irq_install_handler(12, mouse_callback);
     mouse_ok = 1;
-    printk("[mouse] PS/2 OK (IRQ12)\n");
+    printk("[mouse] PS/2 OK — click VGA window to capture\n");
 }
 
 void mouse_get(struct mouse_state *out) {
