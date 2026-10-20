@@ -1,9 +1,9 @@
-/* Default handler for unassigned IDT vectors */
+/*
+ * Default IDT gate — ignore unexpected vectors.
+ * Do NOT call fault_handler (would panic).
+ */
 .global isr_spurious
 .type isr_spurious, @function
 isr_spurious:
-    cli
-    pushl $0
-    pushl $0xFF
-    jmp isr_common
+    iret
 .size isr_spurious, . - isr_spurious

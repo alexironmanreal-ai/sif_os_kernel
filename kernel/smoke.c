@@ -2,14 +2,11 @@
 #include "multiboot.h"
 #include "io.h"
 #include "printk.h"
-#include "string.h"
 
 void smoke_exit(uint32_t code) {
-    /* isa-debug-exit: status = (value >> 1); odd value required */
+    /* QEMU isa-debug-exit: device exits with (value >> 1) */
     uint16_t v = (uint16_t)((code << 1) | 1);
-    outb(0x501, (uint8_t)(v & 0xFF));
-    outb(0x501, (uint8_t)(v >> 8));
-    /* fallback */
+    outw(0x501, v);
     for (;;)
         __asm__ volatile("cli; hlt");
 }
@@ -18,7 +15,6 @@ int smoke_wanted(void) {
     const char *c = multiboot_cmdline();
     if (!c || !c[0])
         return 0;
-    /* look for "smoke" substring */
     for (const char *p = c; *p; p++) {
         if ((p[0] == 's' || p[0] == 'S') &&
             (p[1] == 'm' || p[1] == 'M') &&
