@@ -30,8 +30,6 @@
 #include "cpu.h"
 #include "smoke.h"
 
-extern uint32_t kernel_end;
-
 void panic(const char *msg) {
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_RED);
     printk("\n*** KERNEL PANIC: %s ***\n", msg);
@@ -53,16 +51,19 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     printk("========================================\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
+    printk("[boot] higher-half VMA=%x\n", KERNEL_VMA);
+    printk("[boot] kernel %x - %x (phys %x - %x)\n",
+           (uint32_t)&kernel_start, (uint32_t)&kernel_end,
+           (uint32_t)&kernel_phys_start, (uint32_t)&kernel_phys_end);
+
     if (multiboot_ok()) {
-        printk("[boot] %s entry (32-bit)\n", multiboot_loader_name());
+        printk("[boot] %s\n", multiboot_loader_name());
         if (!multiboot_is_v2() && multiboot_cmdline()[0])
             printk("[boot] cmdline: %s\n", multiboot_cmdline());
     } else {
         printk("[boot] bad magic=%x\n", magic);
         mbi = 0;
     }
-
-    printk("[cpu] LM64=%s\n", cpu_has_long_mode() ? "yes" : "no");
 
     if (multiboot_is_v2())
         mbi = 0;
@@ -94,13 +95,13 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     wire_init();
 
     if (smoke_wanted()) {
-        smoke_note("PASS core boot");
+        smoke_note("PASS higher-half");
         printk("[smoke] PASS\n");
         smoke_exit(0);
     }
 
     printk("----------------------------------------\n");
-    printk("  entry32 | idt256 | smoke | aid\n");
+    printk("  HH kernel | idt256 | wire | aid\n");
     printk("----------------------------------------\n");
     gui_run();
 

@@ -1,5 +1,6 @@
 #include "pmm.h"
 #include "printk.h"
+#include "kernel_mem.h"
 #include <stddef.h>
 
 #define MAX_FRAMES (1024 * 1024)
@@ -33,7 +34,7 @@ static void mark_region(uint32_t addr, uint32_t len, int used_flag) {
     }
 }
 
-void pmm_init(struct multiboot_info *mbi, uint32_t kernel_end) {
+void pmm_init(struct multiboot_info *mbi, uint32_t kernel_end_virt) {
     for (uint32_t i = 0; i < sizeof(bitmap); i++)
         bitmap[i] = 0xFF;
     used = 0;
@@ -82,24 +83,23 @@ void pmm_init(struct multiboot_info *mbi, uint32_t kernel_end) {
         printk("[pmm] fallback %u frames\n", nframes);
     }
 
-    /* always reserve: IVT/BDA, low mem, kernel image */
+    /* reserve low 1MiB + physical kernel image */
     mark_region(0, 0x100000, 1);
-    if (kernel_end > 0x100000)
-        mark_region(0x100000, kernel_end - 0x100000 + PAGE_SIZE, 1);
-    else
-        mark_region(0x100000, 0x100000, 1);
+    {
+        uint32_t kphys_end = V2P(kernel_end_virt);
+        if (kphys_end < KERNEL_LMA)
+            kphys_end = 0x400000;
+        mark_region(KERNEL_LMA, kphys_end - KERNEL_LMA + PAGE_SIZE, 1);
+        printk("[pmm] kernel phys %x-%x\n", KERNEL_LMA, kphys_end);
+    }
 
-    /* Multiboot modules must stay reserved */
     if (mbi && (mbi->flags & MULTIBOOT_INFO_MODS) && mbi->mods_count) {
         struct multiboot_mod_list *mod =
             (struct multiboot_mod_list *)mbi->mods_addr;
         for (uint32_t i = 0; i < mbi->mods_count; i++) {
-            uint32_t ms = mod[i].mod_start;
-            uint32_t me = mod[i].mod_end;
-            if (me > ms) {
-                mark_region(ms, me - ms, 1);
-                printk("[pmm] module %x-%x reserved\n", ms, me);
-            }
+            if (mod[i].mod_end > mod[i].mod_start)
+                mark_region(mod[i].mod_start,
+                            mod[i].mod_end - mod[i].mod_start, 1);
         }
     }
 

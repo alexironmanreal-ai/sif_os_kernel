@@ -1,32 +1,47 @@
+/*
+ * SIF higher-half linker script
+ *
+ * Virtual (VMA):  0xC0100000 ...
+ * Physical (LMA): 0x00100000 ...  (Multiboot load address)
+ *
+ * Boot code enables paging (identity + higher-half), then jumps to VMA.
+ */
+
 ENTRY(_start)
+
+KERNEL_VMA = 0xC0000000;
 
 SECTIONS
 {
-    /* Multiboot loads us at 1 MiB */
-    . = 1M;
+    . = KERNEL_VMA + 1M;
 
-    .text BLOCK(4K) : ALIGN(4K)
+    kernel_start = .;
+    kernel_phys_start = . - KERNEL_VMA;
+
+    .text ALIGN(4K) : AT(ADDR(.text) - KERNEL_VMA)
     {
         *(.multiboot)
+        *(.bootstrap)
         *(.text)
     }
 
-    .rodata BLOCK(4K) : ALIGN(4K)
+    .rodata ALIGN(4K) : AT(ADDR(.rodata) - KERNEL_VMA)
     {
         *(.rodata)
     }
 
-    .data BLOCK(4K) : ALIGN(4K)
+    .data ALIGN(4K) : AT(ADDR(.data) - KERNEL_VMA)
     {
         *(.data)
     }
 
-    .bss BLOCK(4K) : ALIGN(4K)
+    .bss ALIGN(4K) : AT(ADDR(.bss) - KERNEL_VMA)
     {
         *(COMMON)
         *(.bss)
     }
 
-    /* first free address after kernel image */
+    . = ALIGN(4K);
     kernel_end = .;
+    kernel_phys_end = . - KERNEL_VMA;
 }
