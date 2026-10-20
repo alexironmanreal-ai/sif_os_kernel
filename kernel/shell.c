@@ -7,6 +7,7 @@
 #include "timer.h"
 #include "vga.h"
 #include "ns.h"
+#include "dev.h"
 #include "rtc.h"
 #include "kmalloc.h"
 #include "kernel.h"
@@ -49,34 +50,31 @@ static int parse_int(const char *s) {
     return neg ? -n : n;
 }
 
-/* ---- SIF native commands ---- */
-
 static int c_aid(int a, char **v) {
     (void)a;
     (void)v;
-    printk("\n=== SIF console ===\n");
-    printk("  aid              this help\n");
-    printk("  cells [prefix]   list cells (apps / docs)\n");
-    printk("  glance PATH      read cell\n");
-    printk("  forge PATH       create empty cell\n");
-    printk("  scribe PATH TXT  write cell\n");
-    printk("  erase PATH       delete cell\n");
-    printk("  spawn PATH       launch ELF async\n");
+    printk("\n=== SIF 2.1 console ===\n");
+    printk("  aid              help\n");
+    printk("  cells [prefix]   list cells\n");
+    printk("  glance PATH      read\n");
+    printk("  forge PATH       create\n");
+    printk("  scribe PATH TXT  write\n");
+    printk("  erase PATH       delete\n");
+    printk("  link PATH KEY    bind path to store\n");
+    printk("  spawn PATH       launch ELF\n");
     printk("  await [id]       wait process\n");
     printk("  halt ID          stop process\n");
-    printk("  pulse            process list\n");
+    printk("  pulse            processes\n");
     printk("  vault            memory\n");
+    printk("  devs             device registry\n");
     printk("  desk             graphical desk\n");
-    printk("  setup            system setup screen\n");
-    printk("  tick / when      uptime / clock\n");
-    printk("  clear / echo\n");
-    printk("Paths use '.'  e.g. apps.hello  docs.motd\n\n");
+    printk("  setup / tick / when / probe\n");
+    printk("Paths: apps.hello  docs.motd\n\n");
     return 0;
 }
 
 static int c_cells(int a, char **v) {
-    const char *p = (a >= 2) ? v[1] : "";
-    ns_cells(p);
+    ns_cells((a >= 2) ? v[1] : "");
     return 0;
 }
 
@@ -146,6 +144,19 @@ static int c_erase(int a, char **v) {
     return 0;
 }
 
+static int c_link(int a, char **v) {
+    if (a < 3) {
+        printk("link PATH KEY\n");
+        return -1;
+    }
+    if (ns_link(v[1], v[2]) < 0) {
+        printk("link fail\n");
+        return -1;
+    }
+    printk("linked %s -> %s\n", v[1], v[2]);
+    return 0;
+}
+
 static int c_spawn(int a, char **v) {
     if (a < 2) {
         printk("spawn PATH [args]\n");
@@ -156,7 +167,6 @@ static int c_spawn(int a, char **v) {
         printk("bad path\n");
         return -1;
     }
-    /* argv[0] should be store key for loader */
     char *argv_local[8];
     int argc = a - 1;
     if (argc > 7)
@@ -219,6 +229,13 @@ static int c_vault(int a, char **v) {
     return 0;
 }
 
+static int c_devs(int a, char **v) {
+    (void)a;
+    (void)v;
+    dev_list();
+    return 0;
+}
+
 static int c_desk(int a, char **v) {
     (void)a;
     (void)v;
@@ -275,8 +292,8 @@ static int c_version(int a, char **v) {
 static int c_probe(int a, char **v) {
     (void)a;
     (void)v;
-    printk("ata %s  sfs %s  pci %d\n", ata_present() ? "yes" : "no",
-           diskfs_mounted() ? "yes" : "no", pci_count());
+    printk("ata %s  sfs %s  pci %d  devs %d\n", ata_present() ? "yes" : "no",
+           diskfs_mounted() ? "yes" : "no", pci_count(), dev_count_present());
     return 0;
 }
 
@@ -300,11 +317,13 @@ static void reg(void) {
     cmd_register("forge", "create cell", c_forge);
     cmd_register("scribe", "write cell", c_scribe);
     cmd_register("erase", "delete cell", c_erase);
+    cmd_register("link", "bind path", c_link);
     cmd_register("spawn", "launch ELF", c_spawn);
     cmd_register("await", "wait process", c_await);
     cmd_register("halt", "stop process", c_halt);
     cmd_register("pulse", "processes", c_pulse);
     cmd_register("vault", "memory", c_vault);
+    cmd_register("devs", "devices", c_devs);
     cmd_register("desk", "graphics", c_desk);
     cmd_register("setup", "setup screen", c_setup);
     cmd_register("tick", "uptime", c_tick);
@@ -320,7 +339,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF 2.0 console — aid | cells | spawn | desk\nSIF> ");
+    printk("SIF 2.1 — aid | cells | spawn | desk | devs\nSIF> ");
     for (;;) {
         if (task_needs_resched()) {
             task_clear_resched();
