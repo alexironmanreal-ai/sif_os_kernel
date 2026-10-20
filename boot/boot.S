@@ -31,30 +31,33 @@ mb2_start:
     .long 8
 mb2_end:
 
-.section .bootstrap, "aw", @nobits
+/* code + data in one alloc/exec section (no attribute clash) */
+.section .bootstrap, "ax"
+
 .align 4096
 boot_pd:
-    .skip 4096
+    .fill 4096, 1, 0
 boot_pt:
-    .skip 4096 * 4
+    .fill 4096 * 4, 1, 0
 boot_pt_hh:
-    .skip 4096 * 4
+    .fill 4096 * 4, 1, 0
+
 .align 16
 early_stack:
-    .skip 16384
+    .fill 16384, 1, 0
 early_stack_top:
+
 .align 4096
 .global lm_pml4
 lm_pml4:
-    .skip 4096
+    .fill 4096, 1, 0
 .global lm_pdpt
 lm_pdpt:
-    .skip 4096
+    .fill 4096, 1, 0
 .global lm_pd
 lm_pd:
-    .skip 4096
+    .fill 4096, 1, 0
 
-.section .bootstrap, "ax"
 .global _start
 .type _start, @function
 _start:
@@ -63,17 +66,14 @@ _start:
     mov $early_stack_top, %esp
     and $-16, %esp
 
-    /* Multiboot: EAX=magic EBX=info */
     push %eax
     push %ebx
 
-    /* clear page structures */
     mov $boot_pd, %edi
     xor %eax, %eax
     mov $(4096 * 9) / 4, %ecx
     rep stosl
 
-    /* identity PTs: 0 .. 16MiB */
     mov $boot_pt, %edi
     mov $0x3, %eax
     mov $(1024 * 4), %ecx
@@ -83,7 +83,6 @@ _start:
     add $4, %edi
     loop 1b
 
-    /* HH PTs: same physical pages */
     mov $boot_pt_hh, %edi
     mov $0x3, %eax
     mov $(1024 * 4), %ecx
@@ -93,7 +92,6 @@ _start:
     add $4, %edi
     loop 2b
 
-    /* PDEs 0-3 = identity tables */
     mov $boot_pd, %edi
     mov $boot_pt, %eax
     or $0x3, %eax
@@ -105,7 +103,6 @@ _start:
     add $4096, %eax
     mov %eax, 12(%edi)
 
-    /* PDEs 768-771 = HH tables (0xC0000000) */
     mov $boot_pt_hh, %eax
     or $0x3, %eax
     mov %eax, (768 * 4)(%edi)
@@ -123,7 +120,6 @@ _start:
     or $0x80000000, %eax
     mov %eax, %cr0
 
-    /* near jump to high virtual address of hh_entry */
     lea hh_entry, %eax
     jmp *%eax
 
@@ -136,8 +132,8 @@ hh_entry:
     mov $early_stack_top, %esp
     and $-16, %esp
 
-    pop %ebx                 /* mbi */
-    pop %eax                 /* magic */
+    pop %ebx
+    pop %eax
 
     push %ebx
     push %eax
