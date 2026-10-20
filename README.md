@@ -1,38 +1,25 @@
-# SIF Kernel 2.0.0-ns
+# SIF Kernel 2.1.0
 
-Kernel propio. No es un clon de Linux ni de Windows.
-
-## Namespace de celdas
-Rutas con **punto**: `apps.hello`  `docs.motd`
-
-## Comandos SIF (consola)
-| Comando | Que hace |
-|---------|----------|
-| **aid** | ayuda |
-| **cells** [prefijo] | listar celdas |
-| **glance** ruta | leer |
-| **forge** ruta | crear vacia |
-| **scribe** ruta texto | escribir |
-| **erase** ruta | borrar |
-| **spawn** ruta | lanzar ELF |
-| **await** [id] | esperar proceso |
-| **halt** id | matar proceso |
-| **pulse** | procesos |
-| **vault** | memoria |
-| **desk** | escritorio |
-| **setup** | pantalla setup |
-| **tick** | uptime |
-| **when** | fecha RTC |
+Kernel propio. Namespace de celdas, desk con spawn, registro de dispositivos.
 
 ```bash
 git fetch origin && git reset --hard origin/main
 make clean && make && make run
 ```
 
-Ejemplos:
+## Desk
+- Clic en iconos **hello / echo / cat / ls** → `spawn` real (async)
+- Dock, sidebar, menu S
+
+## Consola
 ```
+aid
 cells apps
-glance docs.motd
 spawn apps.hello
 await
+devs
+link mi.app hello.elf
 ```
+
+## Rutas SIF
+`apps.hello`  `docs.motd`  (separador `.`)

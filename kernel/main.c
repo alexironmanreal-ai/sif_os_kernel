@@ -20,6 +20,7 @@
 #include "ata.h"
 #include "fs.h"
 #include "ns.h"
+#include "dev.h"
 #include "diskfs.h"
 #include "rtc.h"
 #include "pci.h"
@@ -74,14 +75,13 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     __asm__ volatile("sti");
     printk("[ok] interrupts armed\n");
     mouse_init();
+    dev_init();
 
     printk("----------------------------------------\n");
-    printk("  SIF 2.0 — desk | cells | spawn | aid\n");
+    printk("  SIF 2.1 — desk spawn | cells | aid\n");
     printk("----------------------------------------\n");
-    printk("[boot] desk...\n");
     gui_run();
 
-    printk("[boot] console\n");
     if (task_create("console", shell_task) < 0)
         panic("no console");
 
