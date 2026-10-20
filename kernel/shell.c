@@ -14,6 +14,7 @@
 #include "kernel.h"
 #include "pci.h"
 #include "multiboot.h"
+#include "cpu.h"
 #include "syscall.h"
 #include "io.h"
 #include "userland.h"
@@ -24,22 +25,6 @@
 #include <stddef.h>
 
 #define LINE_MAX 160
-#define HIST_MAX 16
-
-static char hist[HIST_MAX][LINE_MAX];
-static int hist_count;
-
-static void hist_add(const char *line) {
-    if (!line[0])
-        return;
-    int i = 0;
-    while (line[i] && i < LINE_MAX - 1) {
-        hist[hist_count % HIST_MAX][i] = line[i];
-        i++;
-    }
-    hist[hist_count % HIST_MAX][i] = 0;
-    hist_count++;
-}
 
 static int parse_int(const char *s) {
     int n = 0, neg = 0;
@@ -55,10 +40,7 @@ static int parse_int(const char *s) {
 static int c_aid(int a, char **v) {
     (void)a;
     (void)v;
-    printk("\n=== SIF console ===\n");
-    printk("  boot   Multiboot / memory map\n");
-    printk("  wire cast sniff\n");
-    printk("  cells spawn desk\n\n");
+    printk("boot cpu lm | wire cast sniff | cells spawn desk\n");
     return 0;
 }
 
@@ -69,22 +51,41 @@ static int c_boot(int a, char **v) {
     return 0;
 }
 
+static int c_cpu(int a, char **v) {
+    (void)a;
+    (void)v;
+    cpu_report();
+    return 0;
+}
+
+static int c_lm(int a, char **v) {
+    (void)a;
+    (void)v;
+    if (!cpu_has_long_mode()) {
+        printk("CPU has no long mode\n");
+        return -1;
+    }
+    if (!cpu_has_pae()) {
+        printk("CPU has no PAE\n");
+        return -1;
+    }
+    printk("entering long mode (no return)...\n");
+    longmode_enter();
+    return 0;
+}
+
 static int c_cells(int a, char **v) {
     ns_cells((a >= 2) ? v[1] : "");
     return 0;
 }
 
 static int c_glance(int a, char **v) {
-    if (a < 2) {
-        printk("glance PATH\n");
+    if (a < 2)
         return -1;
-    }
     char b[512];
     uint32_t sz = 0;
-    if (ns_glance(v[1], b, sizeof(b) - 1, &sz) < 0) {
-        printk("no cell\n");
+    if (ns_glance(v[1], b, sizeof(b) - 1, &sz) < 0)
         return -1;
-    }
     b[sz] = 0;
     printk("%s", b);
     if (sz && b[sz - 1] != '\n')
@@ -93,18 +94,12 @@ static int c_glance(int a, char **v) {
 }
 
 static int c_forge(int a, char **v) {
-    if (a < 2) {
-        printk("forge PATH\n");
-        return -1;
-    }
-    return ns_forge(v[1]) < 0 ? -1 : 0;
+    return (a >= 2 && ns_forge(v[1]) == 0) ? 0 : -1;
 }
 
 static int c_scribe(int a, char **v) {
-    if (a < 3) {
-        printk("scribe PATH text\n");
+    if (a < 3)
         return -1;
-    }
     char body[256];
     int pos = 0;
     for (int i = 2; i < a && pos < 255; i++) {
@@ -114,19 +109,15 @@ static int c_scribe(int a, char **v) {
             body[pos++] = *p;
     }
     body[pos] = 0;
-    return ns_scribe(v[1], body, (uint32_t)pos) < 0 ? -1 : 0;
+    return ns_scribe(v[1], body, (uint32_t)pos);
 }
 
 static int c_erase(int a, char **v) {
-    if (a < 2)
-        return -1;
-    return ns_erase(v[1]);
+    return (a >= 2) ? ns_erase(v[1]) : -1;
 }
 
 static int c_link(int a, char **v) {
-    if (a < 3)
-        return -1;
-    return ns_link(v[1], v[2]);
+    return (a >= 3) ? ns_link(v[1], v[2]) : -1;
 }
 
 static int c_spawn(int a, char **v) {
@@ -150,9 +141,7 @@ static int c_spawn(int a, char **v) {
 }
 
 static int c_await(int a, char **v) {
-    int pid = -1;
-    if (a >= 2)
-        pid = parse_int(v[1]);
+    int pid = (a >= 2) ? parse_int(v[1]) : -1;
     int st = 0;
     int w = task_wait(pid, &st);
     if (w < 0)
@@ -162,9 +151,7 @@ static int c_await(int a, char **v) {
 }
 
 static int c_halt(int a, char **v) {
-    if (a < 2)
-        return -1;
-    return task_kill(parse_int(v[1]));
+    return (a >= 2) ? task_kill(parse_int(v[1])) : -1;
 }
 
 static int c_pulse(int a, char **v) {
@@ -179,8 +166,7 @@ static int c_vault(int a, char **v) {
     (void)v;
     uint32_t u, f, b;
     kmalloc_stats(&u, &f, &b);
-    printk("frames free=%u used=%u\n", pmm_free_frames(), pmm_used_frames());
-    printk("heap used=%u free=%u\n", u, f);
+    printk("free frames=%u heap used=%u\n", pmm_free_frames(), u);
     return 0;
 }
 
@@ -280,9 +266,8 @@ static int c_version(int a, char **v) {
 static int c_probe(int a, char **v) {
     (void)a;
     (void)v;
-    printk("ata %s  pci %d  wire %s  mb %s\n", ata_present() ? "yes" : "no",
-           pci_count(), wire_up() ? "UP" : "DOWN",
-           multiboot_ok() ? "OK" : "no");
+    printk("ata %s wire %s lm %s\n", ata_present() ? "yes" : "no",
+           wire_up() ? "UP" : "DOWN", cpu_has_long_mode() ? "yes" : "no");
     return 0;
 }
 
@@ -302,6 +287,8 @@ static void reg(void) {
     cmd_init();
     cmd_register("aid", "help", c_aid);
     cmd_register("boot", "multiboot", c_boot);
+    cmd_register("cpu", "features", c_cpu);
+    cmd_register("lm", "long mode", c_lm);
     cmd_register("cells", "list", c_cells);
     cmd_register("glance", "read", c_glance);
     cmd_register("forge", "create", c_forge);
@@ -332,7 +319,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF 2.2.1 — boot | wire | aid\nSIF> ");
+    printk("SIF 2.3 — cpu | lm | boot | aid\nSIF> ");
     for (;;) {
         if (task_needs_resched()) {
             task_clear_resched();
@@ -348,17 +335,8 @@ void shell_run(void) {
         if (ch == '\n' || ch == '\r') {
             buf[pos] = 0;
             printk("\n");
-            if (pos > 0) {
-                hist_add(buf);
-                char w[LINE_MAX];
-                int i = 0;
-                while (buf[i] && i < LINE_MAX - 1) {
-                    w[i] = buf[i];
-                    i++;
-                }
-                w[i] = 0;
-                cmd_run_line(w);
-            }
+            if (pos > 0)
+                cmd_run_line(buf);
             pos = 0;
             printk("SIF> ");
             continue;

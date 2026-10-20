@@ -32,7 +32,6 @@ run: $(KERNEL) disk
 		-drive file=$(DISK),format=raw,if=ide \
 		-netdev user,id=n0 -device ne2k_pci,netdev=n0 \
 		-no-reboot -no-shutdown
-/* 64-bit capable QEMU (still boots 32-bit Multiboot, LM via 'lm') */
 run64: $(KERNEL) disk
 	qemu-system-x86_64 -kernel $(KERNEL) -serial stdio -m 64M \
 		-drive file=$(DISK),format=raw,if=ide \

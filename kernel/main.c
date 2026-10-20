@@ -27,6 +27,7 @@
 #include "pci.h"
 #include "userland.h"
 #include "vfs.h"
+#include "cpu.h"
 
 extern uint32_t kernel_end;
 
@@ -43,7 +44,6 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
 
     vga_init();
     serial_init();
-
     multiboot_save(magic, mbi);
 
     vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -53,13 +53,19 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
     if (multiboot_ok()) {
-        printk("[boot] Multiboot OK (%s)\n", multiboot_loader_name());
-        if (multiboot_cmdline()[0])
+        printk("[boot] %s entry (32-bit)\n", multiboot_loader_name());
+        if (!multiboot_is_v2() && multiboot_cmdline()[0])
             printk("[boot] cmdline: %s\n", multiboot_cmdline());
     } else {
-        printk("[boot] Multiboot missing/bad magic=%x\n", magic);
+        printk("[boot] bad magic=%x\n", magic);
         mbi = 0;
     }
+
+    printk("[cpu] LM64=%s\n", cpu_has_long_mode() ? "yes" : "no");
+
+    /* MB2 info layout differs — PMM only for MB1 for now */
+    if (multiboot_is_v2())
+        mbi = 0;
 
     gdt_init();
     idt_init();
@@ -88,7 +94,7 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     wire_init();
 
     printk("----------------------------------------\n");
-    printk("  SIF 2.2.1 boot | wire | desk | aid\n");
+    printk("  entry32 | lm | cpu | wire | aid\n");
     printk("----------------------------------------\n");
     gui_run();
 
