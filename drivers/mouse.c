@@ -7,7 +7,7 @@
 #define PS2_STAT 0x64
 #define SCREEN_W 320
 #define SCREEN_H 200
-#define PS2_TIMEOUT 100000
+#define PS2_TIMEOUT 50000
 
 static volatile int mx = 160, my = 100;
 static volatile int mdx, mdy;
@@ -69,22 +69,42 @@ static int mouse_write(uint8_t data) {
 }
 
 void mouse_feed_byte(uint8_t data) {
-    if (data == 0xFA || data == 0xAA || data == 0x00)
+    if (data == 0xFA || data == 0xAA)
         return;
 
-    if (cycle == 0 && !(data & 0x08))
+    /* first byte of packet must have bit3 = 1 */
+    if (cycle == 0) {
+        if (!(data & 0x08))
+            return;
+        packet[0] = data;
+        cycle = 1;
         return;
+    }
 
     packet[cycle++] = data;
     if (cycle < 3)
         return;
+
+    /* full packet */
     cycle = 0;
 
-    if (packet[0] & 0xC0)
+    if (packet[0] & 0xC0) {
+        /* X/Y overflow — drop */
         return;
+    }
 
     int rel_x = (int8_t)packet[1];
     int rel_y = (int8_t)packet[2];
+
+    /* clamp step so one bad packet cannot jump off-screen */
+    if (rel_x > 40)
+        rel_x = 40;
+    if (rel_x < -40)
+        rel_x = -40;
+    if (rel_y > 40)
+        rel_y = 40;
+    if (rel_y < -40)
+        rel_y = -40;
 
     mx += rel_x;
     my -= rel_y;
@@ -112,27 +132,32 @@ void mouse_feed_byte(uint8_t data) {
 
 int mouse_awaiting(void) { return cycle > 0; }
 
+/* IRQ12: only drain to avoid buffer overrun; parse in poll */
 static void mouse_callback(void) {
-    for (int n = 0; n < 16; n++) {
-        uint8_t status = inb(PS2_STAT);
-        if (!(status & 1))
+    for (int n = 0; n < 8; n++) {
+        if (!(inb(PS2_STAT) & 1))
             break;
-        mouse_feed_byte(inb(PS2_DATA));
+        uint8_t st = inb(PS2_STAT);
+        uint8_t data = inb(PS2_DATA);
+        if ((st & 0x20) || cycle > 0)
+            mouse_feed_byte(data);
+        /* else keyboard byte on wrong IRQ — drop to avoid stuck */
     }
 }
 
 void mouse_poll(void) {
     if (!mouse_ok)
         return;
-    for (int n = 0; n < 16; n++) {
-        uint8_t status = inb(PS2_STAT);
-        if (!(status & 1))
+    for (int n = 0; n < 8; n++) {
+        uint8_t st = inb(PS2_STAT);
+        if (!(st & 1))
             break;
-        /* prefer mouse path if AUX or mid-packet */
-        if ((status & 0x20) || cycle > 0)
+        /* only take mouse / mid-packet */
+        if ((st & 0x20) || cycle > 0) {
             mouse_feed_byte(inb(PS2_DATA));
-        else
-            break; /* leave keyboard byte for kbd IRQ */
+        } else {
+            break;
+        }
     }
 }
 
@@ -174,8 +199,8 @@ void mouse_init(void) {
     ps2_flush();
 
     if (ps2_write_cmd(0xA8) < 0) {
-        printk("[mouse] skip A8 — poll-only\n");
-        mouse_ok = 1; /* still allow software nudge */
+        printk("[mouse] soft-only\n");
+        mouse_ok = 1;
         return;
     }
 
@@ -200,7 +225,7 @@ void mouse_init(void) {
     cycle = 0;
     irq_install_handler(12, mouse_callback);
     mouse_ok = 1;
-    printk("[mouse] ready (IRQ12+poll) WASD=move Enter=click\n");
+    printk("[mouse] ready — WASD or move\n");
 }
 
 void mouse_get(struct mouse_state *out) {
@@ -219,6 +244,7 @@ void mouse_clear_edges(void) {
     left_edge_p = 0;
     left_edge_r = 0;
     mdx = mdy = 0;
+    /* do NOT clear moved here if still drawing — caller clears after draw */
     moved = 0;
 }
 
