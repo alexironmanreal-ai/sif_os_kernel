@@ -13,6 +13,7 @@
 #include "kmalloc.h"
 #include "kernel.h"
 #include "pci.h"
+#include "multiboot.h"
 #include "syscall.h"
 #include "io.h"
 #include "userland.h"
@@ -54,13 +55,17 @@ static int parse_int(const char *s) {
 static int c_aid(int a, char **v) {
     (void)a;
     (void)v;
-    printk("\n=== SIF 2.2 console ===\n");
-    printk("  cells glance forge scribe erase link\n");
-    printk("  spawn await halt pulse vault desk\n");
-    printk("  wire   — link status\n");
-    printk("  cast TEXT — broadcast SIF frame\n");
-    printk("  sniff  — receive one frame\n");
-    printk("  devs probe tick when\n\n");
+    printk("\n=== SIF console ===\n");
+    printk("  boot   Multiboot / memory map\n");
+    printk("  wire cast sniff\n");
+    printk("  cells spawn desk\n\n");
+    return 0;
+}
+
+static int c_boot(int a, char **v) {
+    (void)a;
+    (void)v;
+    multiboot_dump();
     return 0;
 }
 
@@ -92,17 +97,12 @@ static int c_forge(int a, char **v) {
         printk("forge PATH\n");
         return -1;
     }
-    if (ns_forge(v[1]) < 0) {
-        printk("forge fail\n");
-        return -1;
-    }
-    printk("forged %s\n", v[1]);
-    return 0;
+    return ns_forge(v[1]) < 0 ? -1 : 0;
 }
 
 static int c_scribe(int a, char **v) {
     if (a < 3) {
-        printk("scribe PATH text...\n");
+        printk("scribe PATH text\n");
         return -1;
     }
     char body[256];
@@ -114,50 +114,27 @@ static int c_scribe(int a, char **v) {
             body[pos++] = *p;
     }
     body[pos] = 0;
-    if (ns_scribe(v[1], body, (uint32_t)pos) < 0) {
-        printk("scribe fail\n");
-        return -1;
-    }
-    printk("ok\n");
-    return 0;
+    return ns_scribe(v[1], body, (uint32_t)pos) < 0 ? -1 : 0;
 }
 
 static int c_erase(int a, char **v) {
-    if (a < 2) {
-        printk("erase PATH\n");
+    if (a < 2)
         return -1;
-    }
-    if (ns_erase(v[1]) < 0) {
-        printk("erase fail\n");
-        return -1;
-    }
-    printk("erased\n");
-    return 0;
+    return ns_erase(v[1]);
 }
 
 static int c_link(int a, char **v) {
-    if (a < 3) {
-        printk("link PATH KEY\n");
+    if (a < 3)
         return -1;
-    }
-    if (ns_link(v[1], v[2]) < 0) {
-        printk("link fail\n");
-        return -1;
-    }
-    printk("linked %s -> %s\n", v[1], v[2]);
-    return 0;
+    return ns_link(v[1], v[2]);
 }
 
 static int c_spawn(int a, char **v) {
-    if (a < 2) {
-        printk("spawn PATH\n");
+    if (a < 2)
         return -1;
-    }
     const char *key = ns_store_key(v[1]);
-    if (!key) {
-        printk("bad path\n");
+    if (!key)
         return -1;
-    }
     char *argv_local[8];
     int argc = a - 1;
     if (argc > 7)
@@ -166,10 +143,8 @@ static int c_spawn(int a, char **v) {
     for (int i = 1; i < argc; i++)
         argv_local[i] = v[i + 1];
     int pid = userland_spawn_file_argv(key, argc, argv_local);
-    if (pid < 0) {
-        printk("spawn fail\n");
+    if (pid < 0)
         return -1;
-    }
     printk("spawned id=%d\n", pid);
     return 0;
 }
@@ -180,26 +155,16 @@ static int c_await(int a, char **v) {
         pid = parse_int(v[1]);
     int st = 0;
     int w = task_wait(pid, &st);
-    if (w < 0) {
-        printk("await fail\n");
+    if (w < 0)
         return -1;
-    }
     printk("await id=%d code=%d\n", w, st);
     return 0;
 }
 
 static int c_halt(int a, char **v) {
-    if (a < 2) {
-        printk("halt ID\n");
+    if (a < 2)
         return -1;
-    }
-    int pid = parse_int(v[1]);
-    if (task_kill(pid) < 0) {
-        printk("halt fail\n");
-        return -1;
-    }
-    printk("halted %d\n", pid);
-    return 0;
+    return task_kill(parse_int(v[1]));
 }
 
 static int c_pulse(int a, char **v) {
@@ -234,10 +199,8 @@ static int c_wire(int a, char **v) {
 }
 
 static int c_cast(int a, char **v) {
-    if (a < 2) {
-        printk("cast TEXT...\n");
+    if (a < 2)
         return -1;
-    }
     char body[200];
     int pos = 0;
     for (int i = 1; i < a && pos < 199; i++) {
@@ -248,12 +211,8 @@ static int c_cast(int a, char **v) {
     }
     body[pos] = 0;
     int r = wire_cast_text(body);
-    if (r < 0) {
-        printk("cast fail (wire down?)\n");
-        return -1;
-    }
-    printk("cast %d B\n", r);
-    return 0;
+    printk(r < 0 ? "cast fail\n" : "cast %d B\n", r);
+    return r < 0 ? -1 : 0;
 }
 
 static int c_sniff(int a, char **v) {
@@ -262,8 +221,6 @@ static int c_sniff(int a, char **v) {
     int n = wire_sniff(1);
     if (n == 0)
         printk("(no frame)\n");
-    else if (n < 0)
-        printk("sniff fail\n");
     return n < 0 ? -1 : 0;
 }
 
@@ -323,8 +280,9 @@ static int c_version(int a, char **v) {
 static int c_probe(int a, char **v) {
     (void)a;
     (void)v;
-    printk("ata %s  pci %d  wire %s\n", ata_present() ? "yes" : "no",
-           pci_count(), wire_up() ? "UP" : "DOWN");
+    printk("ata %s  pci %d  wire %s  mb %s\n", ata_present() ? "yes" : "no",
+           pci_count(), wire_up() ? "UP" : "DOWN",
+           multiboot_ok() ? "OK" : "no");
     return 0;
 }
 
@@ -343,7 +301,8 @@ static int c_reboot(int a, char **v) {
 static void reg(void) {
     cmd_init();
     cmd_register("aid", "help", c_aid);
-    cmd_register("cells", "list cells", c_cells);
+    cmd_register("boot", "multiboot", c_boot);
+    cmd_register("cells", "list", c_cells);
     cmd_register("glance", "read", c_glance);
     cmd_register("forge", "create", c_forge);
     cmd_register("scribe", "write", c_scribe);
@@ -352,13 +311,13 @@ static void reg(void) {
     cmd_register("spawn", "launch", c_spawn);
     cmd_register("await", "wait", c_await);
     cmd_register("halt", "kill", c_halt);
-    cmd_register("pulse", "processes", c_pulse);
-    cmd_register("vault", "memory", c_vault);
+    cmd_register("pulse", "ps", c_pulse);
+    cmd_register("vault", "mem", c_vault);
     cmd_register("devs", "devices", c_devs);
-    cmd_register("wire", "net status", c_wire);
-    cmd_register("cast", "broadcast", c_cast);
-    cmd_register("sniff", "recv frame", c_sniff);
-    cmd_register("desk", "graphics", c_desk);
+    cmd_register("wire", "net", c_wire);
+    cmd_register("cast", "bcast", c_cast);
+    cmd_register("sniff", "recv", c_sniff);
+    cmd_register("desk", "gui", c_desk);
     cmd_register("setup", "setup", c_setup);
     cmd_register("tick", "uptime", c_tick);
     cmd_register("when", "clock", c_when);
@@ -373,7 +332,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF 2.2 — wire | cast | sniff | aid\nSIF> ");
+    printk("SIF 2.2.1 — boot | wire | aid\nSIF> ");
     for (;;) {
         if (task_needs_resched()) {
             task_clear_resched();

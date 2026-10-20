@@ -40,18 +40,26 @@ void panic(const char *msg) {
 
 void kernel_main(uint32_t magic, void *mbi_ptr) {
     struct multiboot_info *mbi = (struct multiboot_info *)mbi_ptr;
+
     vga_init();
     serial_init();
+
+    multiboot_save(magic, mbi);
+
     vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
     printk("========================================\n");
     printk("  %s v%s\n", SIF_KERNEL_NAME, SIF_KERNEL_VERSION);
     printk("========================================\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    if (magic != MULTIBOOT_BOOTLOADER_MAGIC) {
-        printk("[boot] magic=%x\n", magic);
+
+    if (multiboot_ok()) {
+        printk("[boot] Multiboot OK (%s)\n", multiboot_loader_name());
+        if (multiboot_cmdline()[0])
+            printk("[boot] cmdline: %s\n", multiboot_cmdline());
+    } else {
+        printk("[boot] Multiboot missing/bad magic=%x\n", magic);
         mbi = 0;
-    } else
-        printk("[boot] Multiboot OK\n");
+    }
 
     gdt_init();
     idt_init();
@@ -80,7 +88,7 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     wire_init();
 
     printk("----------------------------------------\n");
-    printk("  SIF 2.2 wire | desk | cells | aid\n");
+    printk("  SIF 2.2.1 boot | wire | desk | aid\n");
     printk("----------------------------------------\n");
     gui_run();
 
