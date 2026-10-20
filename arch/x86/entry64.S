@@ -1,6 +1,6 @@
 /*
- * 64-bit entry (reached only after longmode_enter).
- * Assembled inside 32-bit object via .code64.
+ * 64-bit entry after longmode_enter.
+ * Must assemble with gcc -m32: no RIP-relative / 64-bit ELF relocs.
  */
 .section .text
 .code64
@@ -14,51 +14,59 @@ entry64:
     mov %ax, %fs
     mov %ax, %gs
 
-    /* use same stack top (identity mapped) */
-    mov $stack_top, %rsp
-    and $-16, %rsp
+    /* stack: low identity address (phys stack_top may be high after HH;
+       for pre-HH builds use a fixed low stack). Use 0x90000 scratch. */
+    mov $0x90000, %esp
+    mov %rsp, %rbp
 
-    /* serial COM1: "SIF 64-bit long mode\r\n" */
-    lea msg64(%rip), %rsi
-.sloop:
-    movzb (%rsi), %eax
-    test %al, %al
-    jz .vga
+    /* COM1 0x3F8: print "SIF64\r\n" without memory operands */
     mov $0x3F8, %dx
-1:
-    add $5, %dx
-    inb %dx, %al
-    sub $5, %dx
-    test $0x20, %al
-    jz 1b
-    movzb (%rsi), %eax
-    outb %al, %dx
-    inc %rsi
-    jmp .sloop
 
-.vga:
-    /* write banner at VGA text 0xB8000 */
-    mov $0xB8000, %rdi
-    lea msg64(%rip), %rsi
-    mov $0x1F, %ah              /* bright white on blue */
-.vloop:
-    movb (%rsi), %al
-    test %al, %al
-    jz .halt
-    movw %ax, (%rdi)
-    add $2, %rdi
-    inc %rsi
-    jmp .vloop
+    mov $'S', %al
+    call .out
+    mov $'I', %al
+    call .out
+    mov $'F', %al
+    call .out
+    mov $'6', %al
+    call .out
+    mov $'4', %al
+    call .out
+    mov $'\r', %al
+    call .out
+    mov $'\n', %al
+    call .out
 
-.halt:
+    /* VGA text cell at 0xB8000 */
+    mov $0xB8000, %edi
+    mov $0x1F00, %eax
+    mov $'S', %al
+    mov %ax, (%rdi)
+    mov $'I', %al
+    mov %ax, 2(%rdi)
+    mov $'F', %al
+    mov %ax, 4(%rdi)
+    mov $'6', %al
+    mov %ax, 6(%rdi)
+    mov $'4', %al
+    mov %ax, 8(%rdi)
+
     cli
 1:
     hlt
     jmp 1b
 
-.section .rodata
-msg64:
-    .asciz "SIF 64-bit long mode OK\r\n"
+.out:
+    push %ax
+    mov $0x3FD, %dx
+2:
+    inb %dx, %al
+    test $0x20, %al
+    jz 2b
+    mov $0x3F8, %dx
+    pop %ax
+    outb %al, %dx
+    ret
 
-.extern stack_top
+.size entry64, . - entry64
 .code32
