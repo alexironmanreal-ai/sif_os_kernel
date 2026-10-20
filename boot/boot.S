@@ -1,52 +1,79 @@
 /*
- * SIF Multiboot1 entry
- * GRUB sets: EAX = 0x2BADB002, EBX = pointer to multiboot_info
+ * SIF dual boot entry
+ * Multiboot1 (legacy GRUB) + Multiboot2 header
+ * CPU starts in 32-bit protected mode either way.
  */
-.set ALIGN,    1<<0          /* align loaded modules on page boundaries */
-.set MEMINFO,  1<<1          /* provide memory map */
-.set FLAGS,    ALIGN | MEMINFO
-.set MAGIC,    0x1BADB002
-.set CHECKSUM, -(MAGIC + FLAGS)
+
+/* ---- Multiboot1 ---- */
+.set MB1_ALIGN,    1<<0
+.set MB1_MEMINFO,  1<<1
+.set MB1_FLAGS,    MB1_ALIGN | MB1_MEMINFO
+.set MB1_MAGIC,    0x1BADB002
+.set MB1_CHECKSUM, -(MB1_MAGIC + MB1_FLAGS)
 
 .section .multiboot, "a"
 .align 4
-multiboot_header:
-    .long MAGIC
-    .long FLAGS
-    .long CHECKSUM
+mb1_header:
+    .long MB1_MAGIC
+    .long MB1_FLAGS
+    .long MB1_CHECKSUM
+
+/* ---- Multiboot2 ---- */
+.set MB2_MAGIC,          0xE85250D6
+.set MB2_ARCH_I386,      0
+.set MB2_HEADER_LENGTH,  mb2_header_end - mb2_header_start
+.set MB2_CHECKSUM,       -(MB2_MAGIC + MB2_ARCH_I386 + MB2_HEADER_LENGTH)
+
+.align 8
+mb2_header_start:
+    .long MB2_MAGIC
+    .long MB2_ARCH_I386
+    .long MB2_HEADER_LENGTH
+    .long MB2_CHECKSUM
+    /* end tag */
+    .align 8
+    .word 0
+    .word 0
+    .long 8
+mb2_header_end:
 
 .section .bss
 .align 16
 stack_bottom:
-    .skip 32768              /* 32 KiB stack */
+    .skip 32768
 stack_top:
+
+/* page tables for long mode (identity 0-1GiB via 2MiB pages) */
+.align 4096
+.global lm_pml4
+lm_pml4:
+    .skip 4096
+.global lm_pdpt
+lm_pdpt:
+    .skip 4096
+.global lm_pd
+lm_pd:
+    .skip 4096
 
 .section .text
 .global _start
 .type _start, @function
 _start:
-    /* interrupts off until IDT ready */
     cli
-
-    /* stack: 16-byte aligned for SysV ABI */
     mov $stack_top, %esp
     and $-16, %esp
     xor %ebp, %ebp
-
-    /* clear direction flag */
     cld
 
     /*
-     * Multiboot leaves:
-     *   EAX = magic 0x2BADB002
-     *   EBX = phys addr of multiboot_info
-     * Push right-to-left for cdecl: magic first arg, then mbi.
+     * Multiboot1: EAX=0x2BADB002, EBX=info
+     * Multiboot2: EAX=0x36d76289, EBX=info
+     * Pass both to kernel_main(magic, info)
      */
-    push %ebx                /* arg2: multiboot_info * */
-    push %eax                /* arg1: magic */
+    push %ebx
+    push %eax
     call kernel_main
 
-    /* should never return */
     cli
 .hang:
     hlt
