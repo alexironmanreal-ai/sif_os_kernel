@@ -28,6 +28,7 @@
 #include "userland.h"
 #include "vfs.h"
 #include "cpu.h"
+#include "smoke.h"
 
 extern uint32_t kernel_end;
 
@@ -63,7 +64,6 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
 
     printk("[cpu] LM64=%s\n", cpu_has_long_mode() ? "yes" : "no");
 
-    /* MB2 info layout differs — PMM only for MB1 for now */
     if (multiboot_is_v2())
         mbi = 0;
 
@@ -93,8 +93,14 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     dev_init();
     wire_init();
 
+    if (smoke_wanted()) {
+        smoke_note("PASS core boot");
+        printk("[smoke] PASS\n");
+        smoke_exit(0);
+    }
+
     printk("----------------------------------------\n");
-    printk("  entry32 | lm | cpu | wire | aid\n");
+    printk("  entry32 | idt256 | smoke | aid\n");
     printk("----------------------------------------\n");
     gui_run();
 

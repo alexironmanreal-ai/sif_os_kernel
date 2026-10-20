@@ -1,10 +1,7 @@
 /*
- * SIF dual boot entry
- * Multiboot1 (legacy GRUB) + Multiboot2 header
- * CPU starts in 32-bit protected mode either way.
+ * SIF dual boot entry — Multiboot1 + Multiboot2
+ * 32-bit protected mode entry from GRUB/QEMU -kernel
  */
-
-/* ---- Multiboot1 ---- */
 .set MB1_ALIGN,    1<<0
 .set MB1_MEMINFO,  1<<1
 .set MB1_FLAGS,    MB1_ALIGN | MB1_MEMINFO
@@ -18,7 +15,6 @@ mb1_header:
     .long MB1_FLAGS
     .long MB1_CHECKSUM
 
-/* ---- Multiboot2 ---- */
 .set MB2_MAGIC,          0xE85250D6
 .set MB2_ARCH_I386,      0
 .set MB2_HEADER_LENGTH,  mb2_header_end - mb2_header_start
@@ -30,7 +26,6 @@ mb2_header_start:
     .long MB2_ARCH_I386
     .long MB2_HEADER_LENGTH
     .long MB2_CHECKSUM
-    /* end tag */
     .align 8
     .word 0
     .word 0
@@ -43,7 +38,6 @@ stack_bottom:
     .skip 32768
 stack_top:
 
-/* page tables for long mode (identity 0-1GiB via 2MiB pages) */
 .align 4096
 .global lm_pml4
 lm_pml4:
@@ -58,6 +52,8 @@ lm_pd:
 .section .text
 .global _start
 .type _start, @function
+.extern boot_stub
+.extern kernel_main
 _start:
     cli
     mov $stack_top, %esp
@@ -65,11 +61,13 @@ _start:
     xor %ebp, %ebp
     cld
 
-    /*
-     * Multiboot1: EAX=0x2BADB002, EBX=info
-     * Multiboot2: EAX=0x36d76289, EBX=info
-     * Pass both to kernel_main(magic, info)
-     */
+    /* preserve Multiboot EAX/EBX across stub */
+    push %eax
+    push %ebx
+    call boot_stub
+    pop %ebx
+    pop %eax
+
     push %ebx
     push %eax
     call kernel_main
