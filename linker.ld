@@ -1,47 +1,76 @@
 /*
- * SIF higher-half linker script
+ * SIF linker script — higher-half kernel
  *
- * Virtual (VMA):  0xC0100000 ...
- * Physical (LMA): 0x00100000 ...  (Multiboot load address)
+ * Low (identity):
+ *   1MiB: Multiboot header + bootstrap (_start)  → ELF entry is PHYSICAL
  *
- * Boot code enables paging (identity + higher-half), then jumps to VMA.
+ * High (VMA):
+ *   0xC0000000 + phys: .text .rodata .data .bss
+ *
+ * Boot: enable paging (ident + HH), jump to higher-half C kernel.
  */
 
+OUTPUT_FORMAT("elf32-i386")
+OUTPUT_ARCH(i386)
 ENTRY(_start)
 
 KERNEL_VMA = 0xC0000000;
 
 SECTIONS
 {
-    . = KERNEL_VMA + 1M;
+    /* ========== LOW: physical load @ 1 MiB ========== */
+    . = 1M;
+
+    .multiboot :
+    {
+        KEEP(*(.multiboot))
+    }
+
+    .bootstrap : ALIGN(4K)
+    {
+        *(.bootstrap)
+        *(.bootstrap.*)
+    }
+
+    . = ALIGN(4K);
+    _low_end = .;              /* first free phys after bootstrap */
+    kernel_phys_start = 1M;
+
+    /* ========== HIGH: virtual kernel image ========== */
+    . = KERNEL_VMA + _low_end;
 
     kernel_start = .;
-    kernel_phys_start = . - KERNEL_VMA;
 
-    .text ALIGN(4K) : AT(ADDR(.text) - KERNEL_VMA)
+    .text : AT(ADDR(.text) - KERNEL_VMA)
     {
-        *(.multiboot)
-        *(.bootstrap)
-        *(.text)
+        *(.text.hh)
+        *(.text .text.*)
     }
 
-    .rodata ALIGN(4K) : AT(ADDR(.rodata) - KERNEL_VMA)
+    .rodata : AT(ADDR(.rodata) - KERNEL_VMA)
     {
-        *(.rodata)
+        *(.rodata .rodata.*)
     }
 
-    .data ALIGN(4K) : AT(ADDR(.data) - KERNEL_VMA)
+    .data : AT(ADDR(.data) - KERNEL_VMA)
     {
-        *(.data)
+        *(.data .data.*)
     }
 
-    .bss ALIGN(4K) : AT(ADDR(.bss) - KERNEL_VMA)
+    .bss : AT(ADDR(.bss) - KERNEL_VMA)
     {
         *(COMMON)
-        *(.bss)
+        *(.bss .bss.*)
     }
 
     . = ALIGN(4K);
     kernel_end = .;
     kernel_phys_end = . - KERNEL_VMA;
+
+    /DISCARD/ :
+    {
+        *(.note.GNU-stack)
+        *(.comment)
+        *(.eh_frame)
+    }
 }
