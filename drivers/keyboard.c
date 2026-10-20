@@ -1,4 +1,5 @@
 #include "keyboard.h"
+#include "mouse.h"
 #include "io.h"
 #include "irq.h"
 #include "printk.h"
@@ -37,9 +38,12 @@ static void keyboard_callback(void) {
     uint8_t status = inb(KBD_STAT);
     if (!(status & 1))
         return;
-    /* Mouse data shares port — leave for IRQ12 handler */
-    if (status & 0x20)
+
+    /* Mouse bytes: AUX bit or mid-packet — never steal */
+    if ((status & 0x20) || mouse_awaiting()) {
+        mouse_feed_byte(inb(KBD_DATA));
         return;
+    }
 
     uint8_t sc = inb(KBD_DATA);
 

@@ -68,23 +68,18 @@ static int mouse_write(uint8_t data) {
     return ps2_write_data(data);
 }
 
-/* Drain one byte from mouse stream (called from IRQ12) */
-static void mouse_handle_byte(uint8_t data) {
-    /* ignore ACKs mid-stream */
-    if (data == 0xFA || data == 0xAA)
+void mouse_feed_byte(uint8_t data) {
+    if (data == 0xFA || data == 0xAA || data == 0x00)
         return;
 
-    if (cycle == 0 && !(data & 0x08)) {
-        /* out of sync — drop until bit3 set */
+    if (cycle == 0 && !(data & 0x08))
         return;
-    }
 
     packet[cycle++] = data;
     if (cycle < 3)
         return;
     cycle = 0;
 
-    /* overflow bits */
     if (packet[0] & 0xC0)
         return;
 
@@ -92,7 +87,7 @@ static void mouse_handle_byte(uint8_t data) {
     int rel_y = (int8_t)packet[2];
 
     mx += rel_x;
-    my -= rel_y; /* PS/2 Y is opposite to screen */
+    my -= rel_y;
     if (mx < 0)
         mx = 0;
     if (my < 0)
@@ -115,18 +110,52 @@ static void mouse_handle_byte(uint8_t data) {
     moved = 1;
 }
 
+int mouse_awaiting(void) { return cycle > 0; }
+
 static void mouse_callback(void) {
-    /*
-     * On IRQ12 always consume available bytes.
-     * Some QEMU builds do not set status AUX bit (0x20).
-     */
-    for (int n = 0; n < 8; n++) {
+    for (int n = 0; n < 16; n++) {
         uint8_t status = inb(PS2_STAT);
         if (!(status & 1))
             break;
-        uint8_t data = inb(PS2_DATA);
-        mouse_handle_byte(data);
+        mouse_feed_byte(inb(PS2_DATA));
     }
+}
+
+void mouse_poll(void) {
+    if (!mouse_ok)
+        return;
+    for (int n = 0; n < 16; n++) {
+        uint8_t status = inb(PS2_STAT);
+        if (!(status & 1))
+            break;
+        /* prefer mouse path if AUX or mid-packet */
+        if ((status & 0x20) || cycle > 0)
+            mouse_feed_byte(inb(PS2_DATA));
+        else
+            break; /* leave keyboard byte for kbd IRQ */
+    }
+}
+
+void mouse_nudge(int dx, int dy) {
+    mx += dx;
+    my += dy;
+    if (mx < 0)
+        mx = 0;
+    if (my < 0)
+        my = 0;
+    if (mx >= SCREEN_W)
+        mx = SCREEN_W - 1;
+    if (my >= SCREEN_H)
+        my = SCREEN_H - 1;
+    mdx = dx;
+    mdy = dy;
+    moved = 1;
+}
+
+void mouse_click_left(void) {
+    left_edge_p = 1;
+    buttons |= 1;
+    moved = 1;
 }
 
 void mouse_init(void) {
@@ -144,32 +173,24 @@ void mouse_init(void) {
     printk("[mouse] init...\n");
     ps2_flush();
 
-    /* enable aux device interface */
     if (ps2_write_cmd(0xA8) < 0) {
-        printk("[mouse] skip (A8)\n");
+        printk("[mouse] skip A8 — poll-only\n");
+        mouse_ok = 1; /* still allow software nudge */
         return;
     }
 
-    /* controller config: IRQ1+IRQ12, clocks on */
-    if (ps2_write_cmd(0x20) < 0 || ps2_read_data(&tmp) < 0) {
-        printk("[mouse] skip (cfg)\n");
-        return;
-    }
-    tmp |= 0x03;           /* IRQ1 + IRQ12 */
-    tmp &= (uint8_t)~0x30; /* enable kbd+mouse clocks */
-    tmp &= (uint8_t)~0x20; /* ensure mouse clock not disabled */
-    if (ps2_write_cmd(0x60) < 0 || ps2_write_data(tmp) < 0) {
-        printk("[mouse] skip (cfg write)\n");
-        return;
+    if (ps2_write_cmd(0x20) == 0 && ps2_read_data(&tmp) == 0) {
+        tmp |= 0x03;
+        tmp &= (uint8_t)~0x30;
+        ps2_write_cmd(0x60);
+        ps2_write_data(tmp);
     }
 
-    /* reset mouse */
     mouse_write(0xFF);
-    (void)ps2_read_data(&tmp); /* ACK */
-    (void)ps2_read_data(&tmp); /* BAT */
-    (void)ps2_read_data(&tmp); /* device id */
+    (void)ps2_read_data(&tmp);
+    (void)ps2_read_data(&tmp);
+    (void)ps2_read_data(&tmp);
 
-    /* defaults + enable reporting */
     mouse_write(0xF6);
     (void)ps2_read_data(&tmp);
     mouse_write(0xF4);
@@ -179,7 +200,7 @@ void mouse_init(void) {
     cycle = 0;
     irq_install_handler(12, mouse_callback);
     mouse_ok = 1;
-    printk("[mouse] PS/2 OK — click VGA window to capture\n");
+    printk("[mouse] ready (IRQ12+poll) WASD=move Enter=click\n");
 }
 
 void mouse_get(struct mouse_state *out) {
