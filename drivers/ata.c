@@ -22,15 +22,6 @@
 
 static int present = 0;
 
-static inline uint16_t inw(uint16_t port) {
-    uint16_t v;
-    __asm__ volatile("inw %1, %0" : "=a"(v) : "Nd"(port));
-    return v;
-}
-static inline void outw(uint16_t port, uint16_t val) {
-    __asm__ volatile("outw %0, %1" : : "a"(val), "Nd"(port));
-}
-
 static int wait_bsy_clear(void) {
     for (int i = 0; i < 1000000; i++)
         if (!(inb(ATA_STATUS) & ATA_SR_BSY))
@@ -128,7 +119,6 @@ int ata_write_sectors(uint32_t lba, uint8_t count, const void *buf) {
             return -1;
         for (int i = 0; i < 256; i++)
             outw(ATA_DATA, *in++);
-        /* flush cache / wait complete */
         if (wait_bsy_clear() < 0)
             return -1;
     }
