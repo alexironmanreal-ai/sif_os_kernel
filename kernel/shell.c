@@ -8,6 +8,7 @@
 #include "vga.h"
 #include "ns.h"
 #include "dev.h"
+#include "wire.h"
 #include "rtc.h"
 #include "kmalloc.h"
 #include "kernel.h"
@@ -53,23 +54,13 @@ static int parse_int(const char *s) {
 static int c_aid(int a, char **v) {
     (void)a;
     (void)v;
-    printk("\n=== SIF 2.1 console ===\n");
-    printk("  aid              help\n");
-    printk("  cells [prefix]   list cells\n");
-    printk("  glance PATH      read\n");
-    printk("  forge PATH       create\n");
-    printk("  scribe PATH TXT  write\n");
-    printk("  erase PATH       delete\n");
-    printk("  link PATH KEY    bind path to store\n");
-    printk("  spawn PATH       launch ELF\n");
-    printk("  await [id]       wait process\n");
-    printk("  halt ID          stop process\n");
-    printk("  pulse            processes\n");
-    printk("  vault            memory\n");
-    printk("  devs             device registry\n");
-    printk("  desk             graphical desk\n");
-    printk("  setup / tick / when / probe\n");
-    printk("Paths: apps.hello  docs.motd\n\n");
+    printk("\n=== SIF 2.2 console ===\n");
+    printk("  cells glance forge scribe erase link\n");
+    printk("  spawn await halt pulse vault desk\n");
+    printk("  wire   — link status\n");
+    printk("  cast TEXT — broadcast SIF frame\n");
+    printk("  sniff  — receive one frame\n");
+    printk("  devs probe tick when\n\n");
     return 0;
 }
 
@@ -159,7 +150,7 @@ static int c_link(int a, char **v) {
 
 static int c_spawn(int a, char **v) {
     if (a < 2) {
-        printk("spawn PATH [args]\n");
+        printk("spawn PATH\n");
         return -1;
     }
     const char *key = ns_store_key(v[1]);
@@ -223,9 +214,8 @@ static int c_vault(int a, char **v) {
     (void)v;
     uint32_t u, f, b;
     kmalloc_stats(&u, &f, &b);
-    printk("frames free=%u used=%u total=%u\n", pmm_free_frames(),
-           pmm_used_frames(), pmm_total_frames());
-    printk("heap used=%u free=%u blocks=%u\n", u, f, b);
+    printk("frames free=%u used=%u\n", pmm_free_frames(), pmm_used_frames());
+    printk("heap used=%u free=%u\n", u, f);
     return 0;
 }
 
@@ -234,6 +224,47 @@ static int c_devs(int a, char **v) {
     (void)v;
     dev_list();
     return 0;
+}
+
+static int c_wire(int a, char **v) {
+    (void)a;
+    (void)v;
+    wire_status();
+    return 0;
+}
+
+static int c_cast(int a, char **v) {
+    if (a < 2) {
+        printk("cast TEXT...\n");
+        return -1;
+    }
+    char body[200];
+    int pos = 0;
+    for (int i = 1; i < a && pos < 199; i++) {
+        if (i > 1)
+            body[pos++] = ' ';
+        for (char *p = v[i]; *p && pos < 199; p++)
+            body[pos++] = *p;
+    }
+    body[pos] = 0;
+    int r = wire_cast_text(body);
+    if (r < 0) {
+        printk("cast fail (wire down?)\n");
+        return -1;
+    }
+    printk("cast %d B\n", r);
+    return 0;
+}
+
+static int c_sniff(int a, char **v) {
+    (void)a;
+    (void)v;
+    int n = wire_sniff(1);
+    if (n == 0)
+        printk("(no frame)\n");
+    else if (n < 0)
+        printk("sniff fail\n");
+    return n < 0 ? -1 : 0;
 }
 
 static int c_desk(int a, char **v) {
@@ -254,7 +285,7 @@ static int c_tick(int a, char **v) {
     (void)a;
     (void)v;
     uint32_t s = timer_seconds();
-    printk("up %um %us  ticks=%u\n", s / 60, s % 60, timer_ticks());
+    printk("up %um %us\n", s / 60, s % 60);
     return 0;
 }
 
@@ -292,8 +323,8 @@ static int c_version(int a, char **v) {
 static int c_probe(int a, char **v) {
     (void)a;
     (void)v;
-    printk("ata %s  sfs %s  pci %d  devs %d\n", ata_present() ? "yes" : "no",
-           diskfs_mounted() ? "yes" : "no", pci_count(), dev_count_present());
+    printk("ata %s  pci %d  wire %s\n", ata_present() ? "yes" : "no",
+           pci_count(), wire_up() ? "UP" : "DOWN");
     return 0;
 }
 
@@ -313,25 +344,28 @@ static void reg(void) {
     cmd_init();
     cmd_register("aid", "help", c_aid);
     cmd_register("cells", "list cells", c_cells);
-    cmd_register("glance", "read cell", c_glance);
-    cmd_register("forge", "create cell", c_forge);
-    cmd_register("scribe", "write cell", c_scribe);
-    cmd_register("erase", "delete cell", c_erase);
-    cmd_register("link", "bind path", c_link);
-    cmd_register("spawn", "launch ELF", c_spawn);
-    cmd_register("await", "wait process", c_await);
-    cmd_register("halt", "stop process", c_halt);
+    cmd_register("glance", "read", c_glance);
+    cmd_register("forge", "create", c_forge);
+    cmd_register("scribe", "write", c_scribe);
+    cmd_register("erase", "delete", c_erase);
+    cmd_register("link", "bind", c_link);
+    cmd_register("spawn", "launch", c_spawn);
+    cmd_register("await", "wait", c_await);
+    cmd_register("halt", "kill", c_halt);
     cmd_register("pulse", "processes", c_pulse);
     cmd_register("vault", "memory", c_vault);
     cmd_register("devs", "devices", c_devs);
+    cmd_register("wire", "net status", c_wire);
+    cmd_register("cast", "broadcast", c_cast);
+    cmd_register("sniff", "recv frame", c_sniff);
     cmd_register("desk", "graphics", c_desk);
-    cmd_register("setup", "setup screen", c_setup);
+    cmd_register("setup", "setup", c_setup);
     cmd_register("tick", "uptime", c_tick);
-    cmd_register("when", "RTC clock", c_when);
-    cmd_register("clear", "clear screen", c_clear);
+    cmd_register("when", "clock", c_when);
+    cmd_register("clear", "cls", c_clear);
     cmd_register("echo", "print", c_echo);
-    cmd_register("version", "version", c_version);
-    cmd_register("probe", "hardware", c_probe);
+    cmd_register("version", "ver", c_version);
+    cmd_register("probe", "hw", c_probe);
     cmd_register("reboot", "reset", c_reboot);
 }
 
@@ -339,7 +373,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF 2.1 — aid | cells | spawn | desk | devs\nSIF> ");
+    printk("SIF 2.2 — wire | cast | sniff | aid\nSIF> ");
     for (;;) {
         if (task_needs_resched()) {
             task_clear_resched();

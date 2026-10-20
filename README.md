@@ -1,25 +1,25 @@
-# SIF Kernel 2.1.0
+# SIF Kernel 2.2.0-wire
 
-Kernel propio. Namespace de celdas, desk con spawn, registro de dispositivos.
+Kernel propio con **wire** (red NE2000).
 
 ```bash
 git fetch origin && git reset --hard origin/main
 make clean && make && make run
 ```
 
-## Desk
-- Clic en iconos **hello / echo / cat / ls** → `spawn` real (async)
-- Dock, sidebar, menu S
+QEMU incluye `-netdev user -device ne2k_pci`.
 
-## Consola
+## Red (comandos SIF)
 ```
-aid
+wire              # estado + MAC
+cast hola sif     # broadcast frame ethertype 0x88B5
+sniff             # recibir un frame
+```
+
+## Otras
+```
 cells apps
 spawn apps.hello
-await
-devs
-link mi.app hello.elf
+desk
+aid
 ```
-
-## Rutas SIF
-`apps.hello`  `docs.motd`  (separador `.`)

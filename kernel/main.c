@@ -21,6 +21,7 @@
 #include "fs.h"
 #include "ns.h"
 #include "dev.h"
+#include "wire.h"
 #include "diskfs.h"
 #include "rtc.h"
 #include "pci.h"
@@ -76,9 +77,10 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     printk("[ok] interrupts armed\n");
     mouse_init();
     dev_init();
+    wire_init();
 
     printk("----------------------------------------\n");
-    printk("  SIF 2.1 — desk spawn | cells | aid\n");
+    printk("  SIF 2.2 wire | desk | cells | aid\n");
     printk("----------------------------------------\n");
     gui_run();
 
