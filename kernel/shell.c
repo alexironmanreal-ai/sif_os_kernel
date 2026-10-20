@@ -4,42 +4,25 @@
 #include "printk.h"
 #include "task.h"
 #include "pmm.h"
-#include "timer.h"
 #include "vga.h"
 #include "ns.h"
 #include "dev.h"
-#include "wire.h"
 #include "net.h"
-#include "rtc.h"
 #include "kmalloc.h"
 #include "kernel.h"
-#include "pci.h"
 #include "multiboot.h"
 #include "cpu.h"
 #include "io.h"
 #include "userland.h"
 #include "gui.h"
-#include "bios.h"
-#include "ata.h"
 #include <stddef.h>
 
 #define LINE_MAX 160
 
-static int parse_int(const char *s) {
-    int n = 0, neg = 0;
-    if (*s == '-') {
-        neg = 1;
-        s++;
-    }
-    while (*s >= '0' && *s <= '9')
-        n = n * 10 + (*s++ - '0');
-    return neg ? -n : n;
-}
-
 static int c_aid(int a, char **v) {
     (void)a;
     (void)v;
-    printk("net arp ping | cells spawn | cpu lm boot\n");
+    printk("net arp ping dns http | cells spawn | cpu\n");
     return 0;
 }
 
@@ -54,16 +37,13 @@ static int c_net(int a, char **v) {
 static int c_arp(int a, char **v) {
     if (a >= 2) {
         uint8_t ip[4];
-        if (net_parse_ip(v[1], ip) < 0) {
-            printk("usage: arp [a.b.c.d]\n");
-            return -1;
-        }
-        printk("arp who-has %u.%u.%u.%u\n", ip[0], ip[1], ip[2], ip[3]);
-        arp_request(ip);
-        for (int t = 0; t < 10; t++) {
-            for (volatile int i = 0; i < 80000; i++)
-                ;
-            net_poll();
+        if (net_parse_ip(v[1], ip) == 0) {
+            arp_request(ip);
+            for (int t = 0; t < 10; t++) {
+                for (volatile int i = 0; i < 80000; i++)
+                    ;
+                net_poll();
+            }
         }
     }
     arp_dump();
@@ -71,23 +51,75 @@ static int c_arp(int a, char **v) {
 }
 
 static int c_ping(int a, char **v) {
+    if (a < 2)
+        return -1;
+    uint8_t ip[4];
+    if (net_parse_ip(v[1], ip) < 0)
+        return -1;
+    printk("PING %u.%u.%u.%u\n", ip[0], ip[1], ip[2], ip[3]);
+    int ok = 0;
+    for (uint16_t s = 1; s <= 3; s++)
+        if (icmp_ping(ip, s) == 0)
+            ok++;
+    printk("%d/3\n", ok);
+    return ok ? 0 : -1;
+}
+
+static int c_dns(int a, char **v) {
     if (a < 2) {
-        printk("usage: ping a.b.c.d\n");
+        printk("usage: dns name\n");
         return -1;
     }
     uint8_t ip[4];
-    if (net_parse_ip(v[1], ip) < 0) {
-        printk("bad ip\n");
+    return dns_resolve(v[1], ip);
+}
+
+static int c_http(int a, char **v) {
+    const char *host = (a >= 2) ? v[1] : "10.0.2.2";
+    const char *path = (a >= 3) ? v[2] : "/";
+    static char buf[1024];
+    int n = http_get(host, path, buf, sizeof(buf));
+    if (n <= 0) {
+        printk("http fail\n");
         return -1;
     }
-    printk("PING %u.%u.%u.%u\n", ip[0], ip[1], ip[2], ip[3]);
-    int ok = 0;
-    for (uint16_t seq = 1; seq <= 3; seq++) {
-        if (icmp_ping(ip, seq) == 0)
-            ok++;
+    /* print first lines */
+    int show = n > 400 ? 400 : n;
+    for (int i = 0; i < show; i++) {
+        char c = buf[i];
+        if (c >= 32 && c < 127)
+            printk("%c", c);
+        else if (c == '\n')
+            printk("\n");
+        else if (c == '\r')
+            ;
+        else
+            printk(".");
     }
-    printk("%d/3 replies\n", ok);
-    return ok ? 0 : -1;
+    printk("\n");
+    return 0;
+}
+
+static int c_udp(int a, char **v) {
+    if (a < 3) {
+        printk("usage: udp a.b.c.d text\n");
+        return -1;
+    }
+    uint8_t ip[4];
+    if (net_parse_ip(v[1], ip) < 0)
+        return -1;
+    char body[128];
+    int pos = 0;
+    for (int i = 2; i < a && pos < 120; i++) {
+        if (i > 2)
+            body[pos++] = ' ';
+        for (char *p = v[i]; *p && pos < 120; p++)
+            body[pos++] = *p;
+    }
+    body[pos] = 0;
+    int r = udp_send(ip, 4000, 7, body, (uint16_t)pos); /* echo port 7 */
+    printk(r < 0 ? "udp fail\n" : "udp %d B\n", r);
+    return r < 0 ? -1 : 0;
 }
 
 static int c_boot(int a, char **v) {
@@ -104,34 +136,8 @@ static int c_cpu(int a, char **v) {
     return 0;
 }
 
-static int c_lm(int a, char **v) {
-    (void)a;
-    (void)v;
-    if (!cpu_has_long_mode()) {
-        printk("no LM\n");
-        return -1;
-    }
-    printk("entering long mode...\n");
-    longmode_enter();
-    return 0;
-}
-
 static int c_cells(int a, char **v) {
     ns_cells((a >= 2) ? v[1] : "");
-    return 0;
-}
-
-static int c_glance(int a, char **v) {
-    if (a < 2)
-        return -1;
-    char b[512];
-    uint32_t sz = 0;
-    if (ns_glance(v[1], b, sizeof(b) - 1, &sz) < 0)
-        return -1;
-    b[sz] = 0;
-    printk("%s", b);
-    if (sz && b[sz - 1] != '\n')
-        printk("\n");
     return 0;
 }
 
@@ -141,18 +147,11 @@ static int c_spawn(int a, char **v) {
     const char *key = ns_store_key(v[1]);
     if (!key)
         return -1;
-    char *argv_local[8];
-    int argc = a - 1;
-    if (argc > 7)
-        argc = 7;
-    argv_local[0] = (char *)key;
-    for (int i = 1; i < argc; i++)
-        argv_local[i] = v[i + 1];
-    int pid = userland_spawn_file_argv(key, argc, argv_local);
-    if (pid < 0)
-        return -1;
-    printk("spawned id=%d\n", pid);
-    return 0;
+    char *av[4];
+    av[0] = (char *)key;
+    int pid = userland_spawn_file_argv(key, 1, av);
+    printk(pid < 0 ? "fail\n" : "id=%d\n", pid);
+    return pid < 0 ? -1 : 0;
 }
 
 static int c_pulse(int a, char **v) {
@@ -167,7 +166,7 @@ static int c_vault(int a, char **v) {
     (void)v;
     uint32_t u, f, b;
     kmalloc_stats(&u, &f, &b);
-    printk("free frames=%u heap used=%u\n", pmm_free_frames(), u);
+    printk("free frames=%u\n", pmm_free_frames());
     return 0;
 }
 
@@ -189,16 +188,6 @@ static int c_clear(int a, char **v) {
     (void)a;
     (void)v;
     vga_clear();
-    return 0;
-}
-
-static int c_echo(int a, char **v) {
-    for (int i = 1; i < a; i++) {
-        if (i > 1)
-            printk(" ");
-        printk("%s", v[i]);
-    }
-    printk("\n");
     return 0;
 }
 
@@ -227,27 +216,27 @@ static void reg(void) {
     cmd_register("net", "iface", c_net);
     cmd_register("arp", "arp", c_arp);
     cmd_register("ping", "icmp", c_ping);
-    cmd_register("boot", "multiboot", c_boot);
+    cmd_register("dns", "resolve", c_dns);
+    cmd_register("http", "get", c_http);
+    cmd_register("udp", "udp", c_udp);
+    cmd_register("boot", "mb", c_boot);
     cmd_register("cpu", "cpu", c_cpu);
-    cmd_register("lm", "longmode", c_lm);
     cmd_register("cells", "ns", c_cells);
-    cmd_register("glance", "read", c_glance);
     cmd_register("spawn", "exec", c_spawn);
     cmd_register("pulse", "ps", c_pulse);
     cmd_register("vault", "mem", c_vault);
-    cmd_register("devs", "devices", c_devs);
+    cmd_register("devs", "dev", c_devs);
     cmd_register("desk", "gui", c_desk);
     cmd_register("clear", "cls", c_clear);
-    cmd_register("echo", "print", c_echo);
     cmd_register("version", "ver", c_version);
-    cmd_register("reboot", "reset", c_reboot);
+    cmd_register("reboot", "rst", c_reboot);
 }
 
 void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF 2.5 net — net | arp | ping 10.0.2.2\nSIF> ");
+    printk("SIF 2.6 — net arp ping dns http\nSIF> ");
     for (;;) {
         net_poll();
         if (task_needs_resched()) {
