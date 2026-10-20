@@ -6,7 +6,7 @@ ASFLAGS:=-m32
 LDFLAGS:=-m elf_i386 -T linker.ld -nostdlib
 KERNEL:=sif_kernel.elf
 DISK:=disk.img
-OBJS:=boot/boot.o arch/x86/gdt_flush.o arch/x86/idt_load.o arch/x86/isr_stub.o arch/x86/isr_ex_stub.o arch/x86/switch.o arch/x86/syscall_stub.o arch/x86/enter_user.o arch/x86/gdt.o arch/x86/idt.o arch/x86/pic.o arch/x86/irq.o arch/x86/isr.o arch/x86/syscall.o drivers/vga.o drivers/gfx.o drivers/serial.o drivers/timer.o drivers/keyboard.o drivers/mouse.o drivers/ata.o drivers/pci.o drivers/rtc.o mm/pmm.o mm/paging.o mm/kmalloc.o lib/printk.o lib/string.o kernel/main.o kernel/task.o kernel/cmd.o kernel/shell.o kernel/fs.o kernel/diskfs.o kernel/gui.o kernel/bios.o kernel/userland.o kernel/elf.o kernel/vfs.o kernel/sync.o kernel/uaccess.o
+OBJS:=boot/boot.o arch/x86/gdt_flush.o arch/x86/idt_load.o arch/x86/isr_stub.o arch/x86/isr_ex_stub.o arch/x86/switch.o arch/x86/syscall_stub.o arch/x86/enter_user.o arch/x86/gdt.o arch/x86/idt.o arch/x86/pic.o arch/x86/irq.o arch/x86/isr.o arch/x86/syscall.o drivers/vga.o drivers/gfx.o drivers/serial.o drivers/timer.o drivers/keyboard.o drivers/mouse.o drivers/ata.o drivers/pci.o drivers/rtc.o mm/pmm.o mm/paging.o mm/kmalloc.o lib/printk.o lib/string.o kernel/main.o kernel/task.o kernel/cmd.o kernel/shell.o kernel/fs.o kernel/ns.o kernel/diskfs.o kernel/gui.o kernel/bios.o kernel/userland.o kernel/elf.o kernel/vfs.o kernel/sync.o kernel/uaccess.o
 .PHONY: all clean run iso userspace embed disk
 all: userspace embed $(KERNEL)
 userspace:

@@ -1,11 +1,14 @@
-# Roadmap SIF Kernel
+# SIF Kernel — rumbo
 
-## Hecho
-- Procesos, async exec, disco SFS
-- GUI desktop mode 13h
-- **BIOS Setup Utility (estilo Award)**
+## Hecho (2.0)
+- Namespace de celdas (rutas `.`)
+- Comandos propios (aid/cells/spawn/...)
+- Procesos async, paging, syscalls endurecidos
+- Desk grafico + mouse + setup
 
-## Siguiente
-- [ ] Mouse PS/2
-- [ ] Mas apps userspace
-- [ ] VBE mayor resolucion
+## Siguiente (nucleo)
+- [ ] Spawn desde desk (clic = spawn)
+- [ ] Bundles reales (celdas contenedor)
+- [ ] Senales SIF (ping/kill path)
+- [ ] Mapa de memoria Multiboot completo
+- [ ] Mas drivers (como dispositivos SIF)

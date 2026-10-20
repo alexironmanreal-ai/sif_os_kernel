@@ -19,6 +19,7 @@
 #include "gui.h"
 #include "ata.h"
 #include "fs.h"
+#include "ns.h"
 #include "diskfs.h"
 #include "rtc.h"
 #include "pci.h"
@@ -63,6 +64,7 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     task_init();
     ata_init();
     fs_init();
+    ns_init();
     diskfs_init();
     vfs_init();
     rtc_init();
@@ -70,20 +72,18 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     userland_init();
 
     __asm__ volatile("sti");
-    printk("[ok] interrupciones ON\n");
-
-    /* mouse after sti so timeouts cannot wedge boot forever */
+    printk("[ok] interrupts armed\n");
     mouse_init();
 
     printk("----------------------------------------\n");
-    printk("  GUI + mouse | ESC = shell\n");
+    printk("  SIF 2.0 — desk | cells | spawn | aid\n");
     printk("----------------------------------------\n");
-    printk("[boot] launching GUI...\n");
+    printk("[boot] desk...\n");
     gui_run();
 
-    printk("[boot] shell task\n");
-    if (task_create("shell", shell_task) < 0)
-        panic("no shell task");
+    printk("[boot] console\n");
+    if (task_create("console", shell_task) < 0)
+        panic("no console");
 
     for (;;) {
         schedule();
