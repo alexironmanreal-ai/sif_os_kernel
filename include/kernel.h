@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include "kernel_mem.h"
 #define SIF_KERNEL_NAME "SIF Kernel"
-#define SIF_KERNEL_VERSION "2.4.1-hh"
+#define SIF_KERNEL_VERSION "2.5.0-net"
 #define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
 #define MULTIBOOT2_BOOTLOADER_MAGIC 0x36d76289
 void kernel_main(uint32_t magic, void *mbi);

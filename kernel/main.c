@@ -22,6 +22,7 @@
 #include "ns.h"
 #include "dev.h"
 #include "wire.h"
+#include "net.h"
 #include "diskfs.h"
 #include "rtc.h"
 #include "pci.h"
@@ -52,9 +53,6 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
     printk("[boot] higher-half VMA=%x\n", KERNEL_VMA);
-    printk("[boot] kernel %x - %x (phys %x - %x)\n",
-           (uint32_t)&kernel_start, (uint32_t)&kernel_end,
-           (uint32_t)&kernel_phys_start, (uint32_t)&kernel_phys_end);
 
     if (multiboot_ok()) {
         printk("[boot] %s\n", multiboot_loader_name());
@@ -92,16 +90,17 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     printk("[ok] interrupts armed\n");
     mouse_init();
     dev_init();
+    net_init();
     wire_init();
 
     if (smoke_wanted()) {
-        smoke_note("PASS higher-half");
+        smoke_note("PASS net-base");
         printk("[smoke] PASS\n");
         smoke_exit(0);
     }
 
     printk("----------------------------------------\n");
-    printk("  HH kernel | idt256 | wire | aid\n");
+    printk("  net | arp | ping 10.0.2.2\n");
     printk("----------------------------------------\n");
     gui_run();
 
@@ -109,6 +108,7 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
         panic("no console");
 
     for (;;) {
+        net_poll();
         schedule();
         __asm__ volatile("sti; hlt");
     }

@@ -9,19 +9,18 @@
 #include "ns.h"
 #include "dev.h"
 #include "wire.h"
+#include "net.h"
 #include "rtc.h"
 #include "kmalloc.h"
 #include "kernel.h"
 #include "pci.h"
 #include "multiboot.h"
 #include "cpu.h"
-#include "syscall.h"
 #include "io.h"
 #include "userland.h"
 #include "gui.h"
 #include "bios.h"
 #include "ata.h"
-#include "diskfs.h"
 #include <stddef.h>
 
 #define LINE_MAX 160
@@ -40,8 +39,55 @@ static int parse_int(const char *s) {
 static int c_aid(int a, char **v) {
     (void)a;
     (void)v;
-    printk("boot cpu lm | wire cast sniff | cells spawn desk\n");
+    printk("net arp ping | cells spawn | cpu lm boot\n");
     return 0;
+}
+
+static int c_net(int a, char **v) {
+    (void)a;
+    (void)v;
+    net_poll();
+    net_status();
+    return 0;
+}
+
+static int c_arp(int a, char **v) {
+    if (a >= 2) {
+        uint8_t ip[4];
+        if (net_parse_ip(v[1], ip) < 0) {
+            printk("usage: arp [a.b.c.d]\n");
+            return -1;
+        }
+        printk("arp who-has %u.%u.%u.%u\n", ip[0], ip[1], ip[2], ip[3]);
+        arp_request(ip);
+        for (int t = 0; t < 10; t++) {
+            for (volatile int i = 0; i < 80000; i++)
+                ;
+            net_poll();
+        }
+    }
+    arp_dump();
+    return 0;
+}
+
+static int c_ping(int a, char **v) {
+    if (a < 2) {
+        printk("usage: ping a.b.c.d\n");
+        return -1;
+    }
+    uint8_t ip[4];
+    if (net_parse_ip(v[1], ip) < 0) {
+        printk("bad ip\n");
+        return -1;
+    }
+    printk("PING %u.%u.%u.%u\n", ip[0], ip[1], ip[2], ip[3]);
+    int ok = 0;
+    for (uint16_t seq = 1; seq <= 3; seq++) {
+        if (icmp_ping(ip, seq) == 0)
+            ok++;
+    }
+    printk("%d/3 replies\n", ok);
+    return ok ? 0 : -1;
 }
 
 static int c_boot(int a, char **v) {
@@ -62,14 +108,10 @@ static int c_lm(int a, char **v) {
     (void)a;
     (void)v;
     if (!cpu_has_long_mode()) {
-        printk("CPU has no long mode\n");
+        printk("no LM\n");
         return -1;
     }
-    if (!cpu_has_pae()) {
-        printk("CPU has no PAE\n");
-        return -1;
-    }
-    printk("entering long mode (no return)...\n");
+    printk("entering long mode...\n");
     longmode_enter();
     return 0;
 }
@@ -93,33 +135,6 @@ static int c_glance(int a, char **v) {
     return 0;
 }
 
-static int c_forge(int a, char **v) {
-    return (a >= 2 && ns_forge(v[1]) == 0) ? 0 : -1;
-}
-
-static int c_scribe(int a, char **v) {
-    if (a < 3)
-        return -1;
-    char body[256];
-    int pos = 0;
-    for (int i = 2; i < a && pos < 255; i++) {
-        if (i > 2)
-            body[pos++] = ' ';
-        for (char *p = v[i]; *p && pos < 255; p++)
-            body[pos++] = *p;
-    }
-    body[pos] = 0;
-    return ns_scribe(v[1], body, (uint32_t)pos);
-}
-
-static int c_erase(int a, char **v) {
-    return (a >= 2) ? ns_erase(v[1]) : -1;
-}
-
-static int c_link(int a, char **v) {
-    return (a >= 3) ? ns_link(v[1], v[2]) : -1;
-}
-
 static int c_spawn(int a, char **v) {
     if (a < 2)
         return -1;
@@ -138,20 +153,6 @@ static int c_spawn(int a, char **v) {
         return -1;
     printk("spawned id=%d\n", pid);
     return 0;
-}
-
-static int c_await(int a, char **v) {
-    int pid = (a >= 2) ? parse_int(v[1]) : -1;
-    int st = 0;
-    int w = task_wait(pid, &st);
-    if (w < 0)
-        return -1;
-    printk("await id=%d code=%d\n", w, st);
-    return 0;
-}
-
-static int c_halt(int a, char **v) {
-    return (a >= 2) ? task_kill(parse_int(v[1])) : -1;
 }
 
 static int c_pulse(int a, char **v) {
@@ -177,65 +178,10 @@ static int c_devs(int a, char **v) {
     return 0;
 }
 
-static int c_wire(int a, char **v) {
-    (void)a;
-    (void)v;
-    wire_status();
-    return 0;
-}
-
-static int c_cast(int a, char **v) {
-    if (a < 2)
-        return -1;
-    char body[200];
-    int pos = 0;
-    for (int i = 1; i < a && pos < 199; i++) {
-        if (i > 1)
-            body[pos++] = ' ';
-        for (char *p = v[i]; *p && pos < 199; p++)
-            body[pos++] = *p;
-    }
-    body[pos] = 0;
-    int r = wire_cast_text(body);
-    printk(r < 0 ? "cast fail\n" : "cast %d B\n", r);
-    return r < 0 ? -1 : 0;
-}
-
-static int c_sniff(int a, char **v) {
-    (void)a;
-    (void)v;
-    int n = wire_sniff(1);
-    if (n == 0)
-        printk("(no frame)\n");
-    return n < 0 ? -1 : 0;
-}
-
 static int c_desk(int a, char **v) {
     (void)a;
     (void)v;
     gui_run();
-    return 0;
-}
-
-static int c_setup(int a, char **v) {
-    (void)a;
-    (void)v;
-    bios_run();
-    return 0;
-}
-
-static int c_tick(int a, char **v) {
-    (void)a;
-    (void)v;
-    uint32_t s = timer_seconds();
-    printk("up %um %us\n", s / 60, s % 60);
-    return 0;
-}
-
-static int c_when(int a, char **v) {
-    (void)a;
-    (void)v;
-    rtc_print();
     return 0;
 }
 
@@ -263,14 +209,6 @@ static int c_version(int a, char **v) {
     return 0;
 }
 
-static int c_probe(int a, char **v) {
-    (void)a;
-    (void)v;
-    printk("ata %s wire %s lm %s\n", ata_present() ? "yes" : "no",
-           wire_up() ? "UP" : "DOWN", cpu_has_long_mode() ? "yes" : "no");
-    return 0;
-}
-
 static int c_reboot(int a, char **v) {
     (void)a;
     (void)v;
@@ -286,32 +224,22 @@ static int c_reboot(int a, char **v) {
 static void reg(void) {
     cmd_init();
     cmd_register("aid", "help", c_aid);
+    cmd_register("net", "iface", c_net);
+    cmd_register("arp", "arp", c_arp);
+    cmd_register("ping", "icmp", c_ping);
     cmd_register("boot", "multiboot", c_boot);
-    cmd_register("cpu", "features", c_cpu);
-    cmd_register("lm", "long mode", c_lm);
-    cmd_register("cells", "list", c_cells);
+    cmd_register("cpu", "cpu", c_cpu);
+    cmd_register("lm", "longmode", c_lm);
+    cmd_register("cells", "ns", c_cells);
     cmd_register("glance", "read", c_glance);
-    cmd_register("forge", "create", c_forge);
-    cmd_register("scribe", "write", c_scribe);
-    cmd_register("erase", "delete", c_erase);
-    cmd_register("link", "bind", c_link);
-    cmd_register("spawn", "launch", c_spawn);
-    cmd_register("await", "wait", c_await);
-    cmd_register("halt", "kill", c_halt);
+    cmd_register("spawn", "exec", c_spawn);
     cmd_register("pulse", "ps", c_pulse);
     cmd_register("vault", "mem", c_vault);
     cmd_register("devs", "devices", c_devs);
-    cmd_register("wire", "net", c_wire);
-    cmd_register("cast", "bcast", c_cast);
-    cmd_register("sniff", "recv", c_sniff);
     cmd_register("desk", "gui", c_desk);
-    cmd_register("setup", "setup", c_setup);
-    cmd_register("tick", "uptime", c_tick);
-    cmd_register("when", "clock", c_when);
     cmd_register("clear", "cls", c_clear);
     cmd_register("echo", "print", c_echo);
     cmd_register("version", "ver", c_version);
-    cmd_register("probe", "hw", c_probe);
     cmd_register("reboot", "reset", c_reboot);
 }
 
@@ -319,8 +247,9 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF 2.3 — cpu | lm | boot | aid\nSIF> ");
+    printk("SIF 2.5 net — net | arp | ping 10.0.2.2\nSIF> ");
     for (;;) {
+        net_poll();
         if (task_needs_resched()) {
             task_clear_resched();
             task_yield();

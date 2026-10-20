@@ -6,7 +6,7 @@ ASFLAGS:=-m32
 LDFLAGS:=-m elf_i386 -T linker.ld -nostdlib
 KERNEL:=sif_kernel.elf
 DISK:=disk.img
-OBJS:=boot/boot.o boot/stub.o arch/x86/gdt_flush.o arch/x86/idt_load.o arch/x86/isr_stub.o arch/x86/isr_ex_stub.o arch/x86/isr_spurious.o arch/x86/switch.o arch/x86/syscall_stub.o arch/x86/enter_user.o arch/x86/longmode.o arch/x86/entry64.o arch/x86/cpu.o arch/x86/gdt.o arch/x86/idt.o arch/x86/pic.o arch/x86/irq.o arch/x86/isr.o arch/x86/syscall.o drivers/vga.o drivers/gfx.o drivers/serial.o drivers/timer.o drivers/keyboard.o drivers/mouse.o drivers/ata.o drivers/pci.o drivers/rtc.o drivers/ne2k.o mm/pmm.o mm/paging.o mm/kmalloc.o lib/printk.o lib/string.o kernel/main.o kernel/multiboot.o kernel/smoke.o kernel/task.o kernel/cmd.o kernel/shell.o kernel/fs.o kernel/ns.o kernel/dev.o kernel/wire.o kernel/diskfs.o kernel/gui.o kernel/bios.o kernel/userland.o kernel/elf.o kernel/vfs.o kernel/sync.o kernel/uaccess.o
+OBJS:=boot/boot.o boot/stub.o arch/x86/gdt_flush.o arch/x86/idt_load.o arch/x86/isr_stub.o arch/x86/isr_ex_stub.o arch/x86/isr_spurious.o arch/x86/switch.o arch/x86/syscall_stub.o arch/x86/enter_user.o arch/x86/longmode.o arch/x86/entry64.o arch/x86/cpu.o arch/x86/gdt.o arch/x86/idt.o arch/x86/pic.o arch/x86/irq.o arch/x86/isr.o arch/x86/syscall.o drivers/vga.o drivers/gfx.o drivers/serial.o drivers/timer.o drivers/keyboard.o drivers/mouse.o drivers/ata.o drivers/pci.o drivers/rtc.o drivers/ne2k.o mm/pmm.o mm/paging.o mm/kmalloc.o lib/printk.o lib/string.o kernel/main.o kernel/multiboot.o kernel/smoke.o kernel/task.o kernel/cmd.o kernel/shell.o kernel/fs.o kernel/ns.o kernel/dev.o kernel/wire.o kernel/diskfs.o kernel/gui.o kernel/bios.o kernel/userland.o kernel/elf.o kernel/vfs.o kernel/sync.o kernel/uaccess.o net/net.o net/arp.o net/ipv4.o net/icmp.o
 .PHONY: all clean run run64 iso smoke userspace embed disk
 all: userspace embed $(KERNEL)
 userspace:
@@ -43,5 +43,5 @@ smoke: $(KERNEL)
 iso: $(KERNEL)
 	mkdir -p iso_tmp/boot/grub
 	cp $(KERNEL) iso_tmp/boot/sif_kernel.elf
-	printf 'set timeout=3\nset default=0\n\nmenuentry "SIF Kernel" {\n  multiboot /boot/sif_kernel.elf\n  boot\n}\n\nmenuentry "SIF smoke" {\n  multiboot /boot/sif_kernel.elf smoke\n  boot\n}\n' > iso_tmp/boot/grub/grub.cfg
+	printf 'set timeout=3\nset default=0\n\nmenuentry "SIF Kernel" {\n  multiboot /boot/sif_kernel.elf\n  boot\n}\n' > iso_tmp/boot/grub/grub.cfg
 	grub-mkrescue -o sif.iso iso_tmp 2>/dev/null || echo "need grub-mkrescue"
