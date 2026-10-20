@@ -6,7 +6,7 @@ ASFLAGS:=-m32
 LDFLAGS:=-m elf_i386 -T linker.ld -nostdlib
 KERNEL:=sif_kernel.elf
 DISK:=disk.img
-OBJS:=boot/boot.o arch/x86/gdt_flush.o arch/x86/idt_load.o arch/x86/isr_stub.o arch/x86/isr_ex_stub.o arch/x86/switch.o arch/x86/syscall_stub.o arch/x86/enter_user.o arch/x86/gdt.o arch/x86/idt.o arch/x86/pic.o arch/x86/irq.o arch/x86/isr.o arch/x86/syscall.o drivers/vga.o drivers/gfx.o drivers/serial.o drivers/timer.o drivers/keyboard.o drivers/mouse.o drivers/ata.o drivers/pci.o drivers/rtc.o drivers/ne2k.o mm/pmm.o mm/paging.o mm/kmalloc.o lib/printk.o lib/string.o kernel/main.o kernel/task.o kernel/cmd.o kernel/shell.o kernel/fs.o kernel/ns.o kernel/dev.o kernel/wire.o kernel/diskfs.o kernel/gui.o kernel/bios.o kernel/userland.o kernel/elf.o kernel/vfs.o kernel/sync.o kernel/uaccess.o
+OBJS:=boot/boot.o arch/x86/gdt_flush.o arch/x86/idt_load.o arch/x86/isr_stub.o arch/x86/isr_ex_stub.o arch/x86/switch.o arch/x86/syscall_stub.o arch/x86/enter_user.o arch/x86/gdt.o arch/x86/idt.o arch/x86/pic.o arch/x86/irq.o arch/x86/isr.o arch/x86/syscall.o drivers/vga.o drivers/gfx.o drivers/serial.o drivers/timer.o drivers/keyboard.o drivers/mouse.o drivers/ata.o drivers/pci.o drivers/rtc.o drivers/ne2k.o mm/pmm.o mm/paging.o mm/kmalloc.o lib/printk.o lib/string.o kernel/main.o kernel/multiboot.o kernel/task.o kernel/cmd.o kernel/shell.o kernel/fs.o kernel/ns.o kernel/dev.o kernel/wire.o kernel/diskfs.o kernel/gui.o kernel/bios.o kernel/userland.o kernel/elf.o kernel/vfs.o kernel/sync.o kernel/uaccess.o
 .PHONY: all clean run iso userspace embed disk
 all: userspace embed $(KERNEL)
 userspace:
@@ -35,5 +35,5 @@ run: $(KERNEL) disk
 iso: $(KERNEL)
 	mkdir -p iso_tmp/boot/grub
 	cp $(KERNEL) iso_tmp/boot/sif_kernel.elf
-	printf 'set timeout=0\nset default=0\nmenuentry "SIF Kernel" {\n  multiboot /boot/sif_kernel.elf\n  boot\n}\n' > iso_tmp/boot/grub/grub.cfg
-	grub-mkrescue -o sif.iso iso_tmp 2>/dev/null || echo "need grub-mkrescue"
+	printf 'set timeout=3\nset default=0\n\nmenuentry "SIF Kernel" {\n  multiboot /boot/sif_kernel.elf\n  boot\n}\n\nmenuentry "SIF Kernel (serial debug)" {\n  multiboot /boot/sif_kernel.elf console=serial\n  boot\n}\n' > iso_tmp/boot/grub/grub.cfg
+	grub-mkrescue -o sif.iso iso_tmp 2>/dev/null || echo "need grub-mkrescue / xorriso"
