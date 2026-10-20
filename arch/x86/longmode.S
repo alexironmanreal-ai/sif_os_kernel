@@ -24,7 +24,6 @@ gdt64_ptr:
 longmode_enter:
     cli
 
-    /* clear 3 pages */
     mov $lm_pml4, %edi
     xor %eax, %eax
     mov $3072, %ecx
@@ -41,11 +40,11 @@ longmode_enter:
     mov $lm_pd, %edi
     mov $0x83, %eax
     mov $512, %ecx
-.fill_pd:
+1:
     mov %eax, (%edi)
     add $0x200000, %eax
     add $8, %edi
-    loop fills_pd
+    loop 1b
 
     mov %cr4, %eax
     or $0x20, %eax
