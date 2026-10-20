@@ -12,21 +12,29 @@
 #include "timer.h"
 #include "rtc.h"
 #include "string.h"
+#include "userland.h"
+#include "ns.h"
 
-/*
- * SIF Aqua 2 — closer to classic Mac OS X look (320x200)
- */
-
-static int panel;      /* 0 apps 1 disk 2 about */
+static int panel;
 static int dock_sel;
-static int apple_open; /* apple menu visible */
+static int apple_open;
+static int last_spawn_pid;
+static char status_msg[40];
 
 #define CUR_W 9
 #define CUR_H 12
 static uint8_t cur_under[CUR_W * CUR_H];
 static int cur_sx = -1, cur_sy = -1;
-
 static int dock_x, dock_y, dock_ix, dock_iy;
+
+/* app icon grid in content (panel 0) */
+static const char *app_paths[4] = {
+    "apps.hello", "apps.echo", "apps.cat", "apps.ls"
+};
+static const char *app_labels[4] = { "hello", "echo", "cat", "ls" };
+static const uint8_t app_colors[4] = {
+    GFX_LIGHT_BLUE, GFX_GREEN, GFX_BROWN, GFX_CYAN
+};
 
 static void cursor_save(int x, int y) {
     for (int j = 0; j < CUR_H; j++)
@@ -49,30 +57,19 @@ static void cursor_draw(int x, int y) {
     cursor_restore();
     cursor_save(x, y);
     static const char *shape[12] = {
-        "X........",
-        "XX.......",
-        "X.X......",
-        "X..X.....",
-        "X...X....",
-        "X....X...",
-        "X.....X..",
-        "X..XXXXX.",
-        "X.X......",
-        "XX.X.....",
-        "X..X.....",
-        ".X.......",
+        "X........", "XX.......", "X.X......", "X..X.....",
+        "X...X....", "X....X...", "X.....X..", "X..XXXXX.",
+        "X.X......", "XX.X.....", "X..X.....", ".X.......",
     };
     for (int j = 0; j < CUR_H; j++)
-        for (int i = 0; i < CUR_W; i++) {
+        for (int i = 0; i < CUR_W; i++)
             if (shape[j][i] == 'X') {
                 gfx_putpixel(x + i, y + j, GFX_BLACK);
                 if (i + 1 < CUR_W)
                     gfx_putpixel(x + i + 1, y + j, GFX_WHITE);
             }
-        }
 }
 
-/* soft mac-like gradient wallpaper */
 static void draw_wallpaper(void) {
     for (int y = 0; y < GFX_HEIGHT; y++) {
         uint8_t c;
@@ -88,7 +85,6 @@ static void draw_wallpaper(void) {
             c = GFX_DARK_GREY;
         gfx_hline(0, y, GFX_WIDTH, c);
     }
-    /* faint grid of stars */
     for (int i = 0; i < 40; i++) {
         int sx = (i * 37 + 13) % GFX_WIDTH;
         int sy = (i * 53 + 17) % (GFX_HEIGHT - 40);
@@ -97,39 +93,31 @@ static void draw_wallpaper(void) {
     }
 }
 
-/* desktop icons: HD + Trash */
 static void draw_desktop_icons(void) {
-    /* Macintosh HD */
     gfx_fillrect(280, 24, 28, 22, GFX_LIGHT_GREY);
     gfx_rect(280, 24, 28, 22, GFX_WHITE);
     gfx_fillrect(284, 28, 20, 12, GFX_DARK_GREY);
-    gfx_text(276, 48, "Disk", GFX_WHITE, GFX_BLUE);
+    gfx_text(276, 48, "Vault", GFX_WHITE, GFX_BLUE);
 
-    /* Trash */
     gfx_fillrect(284, 64, 20, 24, GFX_LIGHT_GREY);
     gfx_rect(284, 64, 20, 24, GFX_WHITE);
     gfx_fillrect(288, 68, 12, 14, GFX_DARK_GREY);
-    gfx_text(276, 90, "Trash", GFX_WHITE, GFX_BLUE);
+    gfx_text(276, 90, "Bin", GFX_WHITE, GFX_BLUE);
 }
 
 static void draw_menubar(void) {
     gfx_fillrect(0, 0, GFX_WIDTH, 15, GFX_LIGHT_GREY);
     gfx_hline(0, 15, GFX_WIDTH, GFX_DARK_GREY);
-
-    /* Apple-like mark */
     gfx_fillrect(3, 2, 11, 11, GFX_BLACK);
     gfx_text(5, 3, "S", GFX_WHITE, GFX_BLACK);
+    gfx_text(18, 3, "Cells", GFX_BLACK, GFX_LIGHT_GREY);
+    gfx_text(70, 3, "Span", GFX_DARK_GREY, GFX_LIGHT_GREY);
+    gfx_text(110, 3, "View", GFX_DARK_GREY, GFX_LIGHT_GREY);
+    gfx_text(150, 3, "Go", GFX_DARK_GREY, GFX_LIGHT_GREY);
 
-    gfx_text(18, 3, "Finder", GFX_BLACK, GFX_LIGHT_GREY);
-    gfx_text(70, 3, "File", GFX_DARK_GREY, GFX_LIGHT_GREY);
-    gfx_text(106, 3, "Edit", GFX_DARK_GREY, GFX_LIGHT_GREY);
-    gfx_text(142, 3, "View", GFX_DARK_GREY, GFX_LIGHT_GREY);
-    gfx_text(182, 3, "Go", GFX_DARK_GREY, GFX_LIGHT_GREY);
-
-    /* RTC clock */
     struct rtc_time t;
     rtc_read(&t);
-    char clk[16];
+    char clk[8];
     clk[0] = (char)('0' + (t.hour / 10) % 10);
     clk[1] = (char)('0' + t.hour % 10);
     clk[2] = ':';
@@ -148,37 +136,27 @@ static void draw_apple_menu(void) {
     gfx_rect(x, y, w, h, GFX_WHITE);
     gfx_text(x + 6, y + 4, "About SIF", GFX_BLACK, GFX_LIGHT_GREY);
     gfx_hline(x + 4, y + 16, w - 8, GFX_DARK_GREY);
-    gfx_text(x + 6, y + 22, "System Prefs", GFX_DARK_GREY, GFX_LIGHT_GREY);
-    gfx_text(x + 6, y + 34, "BIOS Setup", GFX_BLACK, GFX_LIGHT_GREY);
+    gfx_text(x + 6, y + 22, "Devices", GFX_DARK_GREY, GFX_LIGHT_GREY);
+    gfx_text(x + 6, y + 34, "Setup", GFX_BLACK, GFX_LIGHT_GREY);
     gfx_hline(x + 4, y + 46, w - 8, GFX_DARK_GREY);
-    gfx_text(x + 6, y + 52, "Terminal", GFX_BLACK, GFX_LIGHT_GREY);
+    gfx_text(x + 6, y + 52, "Console", GFX_BLACK, GFX_LIGHT_GREY);
 }
 
 static void draw_traffic(int x, int y) {
-    /* glossy traffic lights */
     gfx_fillrect(x, y, 8, 8, GFX_RED);
     gfx_rect(x, y, 8, 8, GFX_DARK_GREY);
-    gfx_putpixel(x + 2, y + 2, GFX_LIGHT_RED);
     gfx_fillrect(x + 11, y, 8, 8, GFX_YELLOW);
     gfx_rect(x + 11, y, 8, 8, GFX_DARK_GREY);
-    gfx_putpixel(x + 13, y + 2, GFX_WHITE);
     gfx_fillrect(x + 22, y, 8, 8, GFX_GREEN);
     gfx_rect(x + 22, y, 8, 8, GFX_DARK_GREY);
-    gfx_putpixel(x + 24, y + 2, GFX_LIGHT_GREEN);
 }
 
 static void draw_window_aqua(int x, int y, int w, int h, const char *title) {
-    /* drop shadow */
     gfx_fillrect(x + 3, y + 3, w, h, GFX_DARK_GREY);
-    /* body */
     gfx_fillrect(x, y, w, h, GFX_LIGHT_GREY);
     gfx_rect(x, y, w, h, GFX_WHITE);
-    /* titlebar */
     gfx_fillrect(x + 1, y + 1, w - 2, 15, GFX_LIGHT_GREY);
     gfx_hline(x + 1, y + 15, w - 2, GFX_DARK_GREY);
-    /* subtle titlebar lines */
-    for (int i = 3; i < 13; i += 2)
-        gfx_hline(x + 40, y + i, w - 80, GFX_DARK_GREY);
     draw_traffic(x + 5, y + 4);
     int tw = (int)strlen(title) * 8;
     int tx = x + (w - tw) / 2;
@@ -207,55 +185,58 @@ static void draw_app_icon(int x, int y, uint8_t color, const char *name) {
     gfx_text(x - 4, y + 26, name, GFX_DARK_GREY, GFX_WHITE);
 }
 
+/* content area origin for hit-test */
+static int content_cx, content_cy;
+
 static void draw_content(void) {
     int wx = 18, wy = 22, ww = 250, wh = 138;
-    draw_window_aqua(wx, wy, ww, wh, "Finder");
+    draw_window_aqua(wx, wy, ww, wh, "Cellview");
 
-    /* sidebar */
     gfx_fillrect(wx + 2, wy + 17, 82, wh - 19, GFX_LIGHT_GREY);
     gfx_vline(wx + 84, wy + 17, wh - 19, GFX_DARK_GREY);
-    gfx_text(wx + 6, wy + 20, "FAVORITES", GFX_DARK_GREY, GFX_LIGHT_GREY);
+    gfx_text(wx + 6, wy + 20, "ROOT", GFX_DARK_GREY, GFX_LIGHT_GREY);
     draw_sidebar_item(wx + 2, wy + 34, "Apps", GFX_LIGHT_BLUE, panel == 0);
-    draw_sidebar_item(wx + 2, wy + 48, "Disk", GFX_BROWN, panel == 1);
+    draw_sidebar_item(wx + 2, wy + 48, "Vault", GFX_BROWN, panel == 1);
     draw_sidebar_item(wx + 2, wy + 62, "About", GFX_MAGENTA, panel == 2);
-    draw_sidebar_item(wx + 2, wy + 76, "BIOS", GFX_BLUE, 0);
+    draw_sidebar_item(wx + 2, wy + 76, "Setup", GFX_BLUE, 0);
 
-    /* content */
     gfx_fillrect(wx + 86, wy + 17, ww - 88, wh - 19, GFX_WHITE);
 
     int cx = wx + 92;
     int cy = wy + 22;
+    content_cx = cx;
+    content_cy = cy;
 
     if (panel == 0) {
-        gfx_text(cx, cy, "Applications", GFX_BLACK, GFX_WHITE);
-        draw_app_icon(cx, cy + 16, GFX_LIGHT_BLUE, "hello");
-        draw_app_icon(cx + 48, cy + 16, GFX_GREEN, "echo");
-        draw_app_icon(cx + 96, cy + 16, GFX_BROWN, "cat");
-        draw_app_icon(cx, cy + 56, GFX_CYAN, "ls");
-        gfx_text(cx + 48, cy + 64, "Double-click", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(cx + 48, cy + 74, "soon / use T", GFX_DARK_GREY, GFX_WHITE);
-    } else if (panel == 1) {
-        gfx_text(cx, cy, "Storage", GFX_BLACK, GFX_WHITE);
-        if (!ata_present()) {
-            gfx_text(cx, cy + 20, "No disk", GFX_RED, GFX_WHITE);
-        } else if (!diskfs_mounted()) {
-            gfx_text(cx, cy + 20, "Disk ready", GFX_BROWN, GFX_WHITE);
-            gfx_text(cx, cy + 34, "mkfs in Terminal", GFX_LIGHT_BLUE, GFX_WHITE);
-        } else {
-            gfx_text(cx, cy + 20, "SFS Mounted", GFX_GREEN, GFX_WHITE);
-            gfx_text(cx, cy + 34, "dls / dcat", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(cx, cy, "Apps — click to spawn", GFX_BLACK, GFX_WHITE);
+        for (int i = 0; i < 4; i++) {
+            int ix = cx + (i % 3) * 48;
+            int iy = cy + 16 + (i / 3) * 40;
+            draw_app_icon(ix, iy, app_colors[i], app_labels[i]);
         }
-        gfx_text(cx, cy + 60, "Ramfs always on", GFX_DARK_GREY, GFX_WHITE);
+        if (status_msg[0])
+            gfx_text(cx, cy + 100, status_msg, GFX_LIGHT_BLUE, GFX_WHITE);
+    } else if (panel == 1) {
+        gfx_text(cx, cy, "Vault", GFX_BLACK, GFX_WHITE);
+        if (!ata_present())
+            gfx_text(cx, cy + 20, "No ATA disk", GFX_RED, GFX_WHITE);
+        else if (!diskfs_mounted()) {
+            gfx_text(cx, cy + 20, "Disk present", GFX_BROWN, GFX_WHITE);
+            gfx_text(cx, cy + 34, "format from console", GFX_LIGHT_BLUE, GFX_WHITE);
+        } else {
+            gfx_text(cx, cy + 20, "SFS mounted", GFX_GREEN, GFX_WHITE);
+        }
+        gfx_text(cx, cy + 60, "Cells always online", GFX_DARK_GREY, GFX_WHITE);
     } else {
-        gfx_text(cx, cy, "About This Mac", GFX_BLACK, GFX_WHITE);
+        gfx_text(cx, cy, "About SIF", GFX_BLACK, GFX_WHITE);
         gfx_fillrect(cx, cy + 14, 40, 40, GFX_LIGHT_BLUE);
         gfx_rect(cx, cy + 14, 40, 40, GFX_DARK_GREY);
         gfx_text(cx + 12, cy + 28, "S", GFX_WHITE, GFX_LIGHT_BLUE);
         gfx_text(cx + 48, cy + 18, SIF_KERNEL_NAME, GFX_BLACK, GFX_WHITE);
         gfx_text(cx + 48, cy + 30, SIF_KERNEL_VERSION, GFX_LIGHT_BLUE, GFX_WHITE);
-        gfx_text(cx + 48, cy + 44, "i386 Hobby OS", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(cx, cy + 70, "Aqua desktop + PS/2", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(cx, cy + 82, "Inspired by Mac OS X", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(cx + 48, cy + 44, "i386 own design", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(cx, cy + 70, "Cells + spawn + desk", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(cx, cy + 82, "Not a Linux clone", GFX_DARK_GREY, GFX_WHITE);
     }
 }
 
@@ -266,11 +247,10 @@ static void dock_icon(int x, int y, uint8_t color, const char *label, int select
     }
     gfx_fillrect(x, y, 24, 20, color);
     gfx_rect(x, y, 24, 20, GFX_WHITE);
-    /* gloss */
     gfx_fillrect(x + 2, y + 2, 20, 6, GFX_WHITE);
     if (label && label[0])
-        gfx_char(x + 8, y + 8, label[0], color == GFX_WHITE ? GFX_BLACK : GFX_WHITE,
-                 color);
+        gfx_char(x + 8, y + 8, label[0],
+                 color == GFX_WHITE ? GFX_BLACK : GFX_WHITE, color);
 }
 
 static void draw_dock(void) {
@@ -278,29 +258,19 @@ static void draw_dock(void) {
     int dock_w = 220;
     dock_y = GFX_HEIGHT - dock_h - 2;
     dock_x = (GFX_WIDTH - dock_w) / 2;
-
-    /* frosted dock */
     gfx_fillrect(dock_x + 2, dock_y + 2, dock_w, dock_h, GFX_DARK_GREY);
     gfx_fillrect(dock_x, dock_y, dock_w, dock_h, GFX_LIGHT_GREY);
     gfx_rect(dock_x, dock_y, dock_w, dock_h, GFX_WHITE);
     gfx_hline(dock_x, dock_y, dock_w, GFX_CYAN);
-
     dock_ix = dock_x + 10;
     dock_iy = dock_y + 5;
     dock_icon(dock_ix, dock_iy, GFX_LIGHT_BLUE, "A", dock_sel == 0);
-    dock_icon(dock_ix + 32, dock_iy, GFX_BROWN, "D", dock_sel == 1);
+    dock_icon(dock_ix + 32, dock_iy, GFX_BROWN, "V", dock_sel == 1);
     dock_icon(dock_ix + 64, dock_iy, GFX_MAGENTA, "i", dock_sel == 2);
-    /* separator */
     gfx_vline(dock_ix + 96, dock_iy, 20, GFX_DARK_GREY);
-    dock_icon(dock_ix + 104, dock_iy, GFX_BLUE, "B", dock_sel == 3);
-    dock_icon(dock_ix + 136, dock_iy, GFX_BLACK, "T", dock_sel == 4);
+    dock_icon(dock_ix + 104, dock_iy, GFX_BLUE, "S", dock_sel == 3);
+    dock_icon(dock_ix + 136, dock_iy, GFX_BLACK, "C", dock_sel == 4);
     dock_icon(dock_ix + 168, dock_iy, GFX_DARK_GREY, "Q", dock_sel == 5);
-
-    for (int i = 0; i < 5; i++) {
-        int dx = dock_ix + (i < 3 ? i * 32 : 104 + (i - 3) * 32) + 10;
-        if (i == dock_sel)
-            gfx_fillrect(dx, dock_y + dock_h - 5, 4, 2, GFX_WHITE);
-    }
 }
 
 static void draw_desktop(void) {
@@ -313,28 +283,56 @@ static void draw_desktop(void) {
     draw_apple_menu();
 }
 
-/* hit ids:
- * 0-4 dock, 5 quit dock, 10-13 sidebar, 20 apple, 21 about menu,
- * 22 bios menu, 23 terminal menu, 30 disk icon, 31 trash, 99 close
+static int spawn_app(int idx) {
+    if (idx < 0 || idx > 3)
+        return -1;
+    const char *path = app_paths[idx];
+    const char *key = ns_store_key(path);
+    if (!key)
+        return -1;
+    char *argv[1];
+    argv[0] = (char *)key;
+    int pid = userland_spawn_file_argv(key, 1, argv);
+    last_spawn_pid = pid;
+    if (pid >= 0) {
+        /* status: "spawn N" */
+        status_msg[0] = 's';
+        status_msg[1] = 'p';
+        status_msg[2] = 'a';
+        status_msg[3] = 'w';
+        status_msg[4] = 'n';
+        status_msg[5] = ' ';
+        status_msg[6] = (char)('0' + (pid / 10) % 10);
+        status_msg[7] = (char)('0' + pid % 10);
+        status_msg[8] = 0;
+        printk("[desk] spawn %s -> pid %d\n", path, pid);
+    } else {
+        status_msg[0] = 'f';
+        status_msg[1] = 'a';
+        status_msg[2] = 'i';
+        status_msg[3] = 'l';
+        status_msg[4] = 0;
+        printk("[desk] spawn fail %s\n", path);
+    }
+    return pid;
+}
+
+/*
+ * ids: 0-2 panels, 3 setup, 4 console, 5 quit,
+ * 10-13 sidebar, 20-23 menu, 30 vault icon, 40-43 app icons, 99 close
  */
 static int hit_test(int x, int y) {
-    /* apple mark */
     if (x >= 3 && x < 14 && y >= 2 && y < 13)
         return 20;
-
-    if (apple_open) {
-        if (x >= 2 && x < 112 && y >= 16 && y < 86) {
-            if (y < 32)
-                return 21; /* about */
-            if (y >= 34 && y < 46)
-                return 22; /* bios */
-            if (y >= 52 && y < 64)
-                return 23; /* terminal */
-            return 20;
-        }
+    if (apple_open && x >= 2 && x < 112 && y >= 16 && y < 86) {
+        if (y < 32)
+            return 21;
+        if (y >= 34 && y < 46)
+            return 22;
+        if (y >= 52 && y < 64)
+            return 23;
+        return 20;
     }
-
-    /* dock icons 0-4 + quit */
     for (int i = 0; i < 3; i++) {
         int ix = dock_ix + i * 32;
         if (x >= ix && x < ix + 24 && y >= dock_iy && y < dock_iy + 20)
@@ -347,7 +345,6 @@ static int hit_test(int x, int y) {
     if (x >= dock_ix + 168 && x < dock_ix + 192 && y >= dock_iy && y < dock_iy + 20)
         return 5;
 
-    /* sidebar */
     int sx = 20, sy0 = 56;
     for (int i = 0; i < 4; i++) {
         int sy = sy0 + i * 14;
@@ -355,20 +352,29 @@ static int hit_test(int x, int y) {
             return 10 + i;
     }
 
-    /* desktop icons */
+    if (panel == 0) {
+        for (int i = 0; i < 4; i++) {
+            int ix = content_cx + (i % 3) * 48;
+            int iy = content_cy + 16 + (i / 3) * 40;
+            if (x >= ix && x < ix + 28 && y >= iy && y < iy + 24)
+                return 40 + i;
+        }
+    }
+
     if (x >= 280 && x < 308 && y >= 24 && y < 56)
         return 30;
-    if (x >= 284 && x < 304 && y >= 64 && y < 98)
-        return 31;
-
-    /* red close */
     if (x >= 23 && x < 31 && y >= 26 && y < 34)
         return 99;
-
     return -1;
 }
 
 static int activate(int id) {
+    if (id >= 40 && id <= 43) {
+        apple_open = 0;
+        spawn_app(id - 40);
+        draw_desktop();
+        return 0;
+    }
     if (id == 20) {
         apple_open = !apple_open;
         draw_desktop();
@@ -393,7 +399,6 @@ static int activate(int id) {
     }
     if (id == 23 || id == 4 || id == 5 || id == 99)
         return 1;
-
     if (id >= 0 && id <= 2) {
         apple_open = 0;
         panel = id;
@@ -415,13 +420,6 @@ static int activate(int id) {
         draw_desktop();
         return 0;
     }
-    if (id == 31) {
-        /* trash — noop visual */
-        apple_open = 0;
-        draw_desktop();
-        return 0;
-    }
-    /* click outside closes apple menu */
     if (apple_open) {
         apple_open = 0;
         draw_desktop();
@@ -430,11 +428,12 @@ static int activate(int id) {
 }
 
 void gui_run(void) {
-    printk("[gui] Aqua 2 — Mac-style desktop\n");
-
+    printk("[desk] SIF Cellview + spawn\n");
     panel = 0;
     dock_sel = 0;
     apple_open = 0;
+    last_spawn_pid = -1;
+    status_msg[0] = 0;
 
     gfx_init_mode13();
     draw_desktop();
@@ -447,8 +446,6 @@ void gui_run(void) {
 
     for (;;) {
         int quit = 0;
-
-        /* refresh clock each minute */
         struct rtc_time t;
         rtc_read(&t);
         if (t.minute != last_min) {
@@ -465,10 +462,9 @@ void gui_run(void) {
             int pressed = ms.left_pressed;
             mouse_clear_edges();
             cursor_draw(ms.x, ms.y);
-
             if (pressed) {
                 int id = hit_test(ms.x, ms.y);
-                printk("[gui] click %d,%d id=%d\n", ms.x, ms.y, id);
+                printk("[desk] click %d,%d id=%d\n", ms.x, ms.y, id);
                 if (id >= 0) {
                     cursor_restore();
                     if (activate(id))
@@ -492,22 +488,18 @@ void gui_run(void) {
             int ch = keyboard_read_char();
             if (ch == 27 || ch == 'q' || ch == 'Q')
                 quit = 1;
-            else if (ch >= '1' && ch <= '5') {
+            else if (ch >= '1' && ch <= '4') {
                 cursor_restore();
-                if (ch == '5')
-                    quit = 1;
-                else
-                    activate(ch - '1');
-                if (!quit) {
-                    mouse_get(&ms);
-                    cursor_draw(ms.x, ms.y);
-                }
-            }
+                spawn_app(ch - '1');
+                draw_desktop();
+                mouse_get(&ms);
+                cursor_draw(ms.x, ms.y);
+            } else if (ch == '5')
+                quit = 1;
         }
 
         if (quit)
             break;
-
         if (!keyboard_has_input() && !mouse_moved())
             __asm__ volatile("hlt");
     }
@@ -517,7 +509,7 @@ void gui_run(void) {
     vga_init();
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     vga_clear();
-    printk("[gui] left desktop\n");
+    printk("[desk] exit\n");
 }
 
 void gui_task(void) {
