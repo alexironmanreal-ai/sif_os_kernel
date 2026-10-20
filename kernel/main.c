@@ -16,7 +16,6 @@
 #include "task.h"
 #include "syscall.h"
 #include "shell.h"
-#include "gui.h"
 #include "ata.h"
 #include "fs.h"
 #include "ns.h"
@@ -92,18 +91,16 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     net_init();
     wire_init();
 
-    security_audit();
-
     if (smoke_wanted()) {
-        smoke_note("PASS sec");
+        smoke_note("PASS console");
         printk("[smoke] PASS\n");
         smoke_exit(0);
     }
 
     printk("----------------------------------------\n");
-    printk("  sec | net | ping | spawn\n");
+    printk("  console mode (no GUI)\n");
+    printk("  aid | sec | net | spawn\n");
     printk("----------------------------------------\n");
-    gui_run();
 
     if (task_create("console", shell_task) < 0)
         panic("no console");

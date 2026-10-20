@@ -14,7 +14,6 @@
 #include "cpu.h"
 #include "io.h"
 #include "userland.h"
-#include "gui.h"
 #include "security.h"
 #include <stddef.h>
 
@@ -23,7 +22,7 @@
 static int c_aid(int a, char **v) {
     (void)a;
     (void)v;
-    printk("sec net arp ping dns http | cells spawn\n");
+    printk("sec net arp ping dns http | cells spawn | pulse\n");
     return 0;
 }
 
@@ -136,13 +135,6 @@ static int c_devs(int a, char **v) {
     return 0;
 }
 
-static int c_desk(int a, char **v) {
-    (void)a;
-    (void)v;
-    gui_run();
-    return 0;
-}
-
 static int c_clear(int a, char **v) {
     (void)a;
     (void)v;
@@ -190,7 +182,6 @@ static void reg(void) {
     cmd_register("pulse", "ps", c_pulse);
     cmd_register("vault", "mem", c_vault);
     cmd_register("devs", "dev", c_devs);
-    cmd_register("desk", "gui", c_desk);
     cmd_register("clear", "cls", c_clear);
     cmd_register("version", "ver", c_version);
     cmd_register("cpu", "cpu", c_cpu);
@@ -201,7 +192,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF 2.7 sec — sec | net | spawn\nSIF> ");
+    printk("SIF console — aid | sec | net | spawn\nSIF> ");
     for (;;) {
         net_poll();
         if (task_needs_resched()) {
