@@ -27,7 +27,6 @@ static uint8_t cur_under[CUR_W * CUR_H];
 static int cur_sx = -1, cur_sy = -1;
 static int dock_x, dock_y, dock_ix, dock_iy;
 
-/* app icon grid in content (panel 0) */
 static const char *app_paths[4] = {
     "apps.hello", "apps.echo", "apps.cat", "apps.ls"
 };
@@ -185,7 +184,6 @@ static void draw_app_icon(int x, int y, uint8_t color, const char *name) {
     gfx_text(x - 4, y + 26, name, GFX_DARK_GREY, GFX_WHITE);
 }
 
-/* content area origin for hit-test */
 static int content_cx, content_cy;
 
 static void draw_content(void) {
@@ -208,7 +206,7 @@ static void draw_content(void) {
     content_cy = cy;
 
     if (panel == 0) {
-        gfx_text(cx, cy, "Apps — click to spawn", GFX_BLACK, GFX_WHITE);
+        gfx_text(cx, cy, "Apps  WASD+Enter", GFX_BLACK, GFX_WHITE);
         for (int i = 0; i < 4; i++) {
             int ix = cx + (i % 3) * 48;
             int iy = cy + 16 + (i / 3) * 40;
@@ -235,8 +233,8 @@ static void draw_content(void) {
         gfx_text(cx + 48, cy + 18, SIF_KERNEL_NAME, GFX_BLACK, GFX_WHITE);
         gfx_text(cx + 48, cy + 30, SIF_KERNEL_VERSION, GFX_LIGHT_BLUE, GFX_WHITE);
         gfx_text(cx + 48, cy + 44, "i386 own design", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(cx, cy + 70, "Cells + spawn + desk", GFX_DARK_GREY, GFX_WHITE);
-        gfx_text(cx, cy + 82, "Not a Linux clone", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(cx, cy + 70, "WASD move  Enter click", GFX_DARK_GREY, GFX_WHITE);
+        gfx_text(cx, cy + 82, "ESC console", GFX_DARK_GREY, GFX_WHITE);
     }
 }
 
@@ -295,7 +293,6 @@ static int spawn_app(int idx) {
     int pid = userland_spawn_file_argv(key, 1, argv);
     last_spawn_pid = pid;
     if (pid >= 0) {
-        /* status: "spawn N" */
         status_msg[0] = 's';
         status_msg[1] = 'p';
         status_msg[2] = 'a';
@@ -312,15 +309,10 @@ static int spawn_app(int idx) {
         status_msg[2] = 'i';
         status_msg[3] = 'l';
         status_msg[4] = 0;
-        printk("[desk] spawn fail %s\n", path);
     }
     return pid;
 }
 
-/*
- * ids: 0-2 panels, 3 setup, 4 console, 5 quit,
- * 10-13 sidebar, 20-23 menu, 30 vault icon, 40-43 app icons, 99 close
- */
 static int hit_test(int x, int y) {
     if (x >= 3 && x < 14 && y >= 2 && y < 13)
         return 20;
@@ -427,8 +419,18 @@ static int activate(int id) {
     return 0;
 }
 
+static int handle_click_at(int x, int y) {
+    int id = hit_test(x, y);
+    printk("[desk] click %d,%d id=%d\n", x, y, id);
+    if (id >= 0)
+        return activate(id);
+    if (apple_open)
+        return activate(-1);
+    return 0;
+}
+
 void gui_run(void) {
-    printk("[desk] SIF Cellview + spawn\n");
+    printk("[desk] poll mouse + WASD/Enter\n");
     panel = 0;
     dock_sel = 0;
     apple_open = 0;
@@ -446,6 +448,10 @@ void gui_run(void) {
 
     for (;;) {
         int quit = 0;
+
+        /* always poll PS/2 — does not depend on IRQ12 */
+        mouse_poll();
+
         struct rtc_time t;
         rtc_read(&t);
         if (t.minute != last_min) {
@@ -463,43 +469,57 @@ void gui_run(void) {
             mouse_clear_edges();
             cursor_draw(ms.x, ms.y);
             if (pressed) {
-                int id = hit_test(ms.x, ms.y);
-                printk("[desk] click %d,%d id=%d\n", ms.x, ms.y, id);
-                if (id >= 0) {
-                    cursor_restore();
-                    if (activate(id))
-                        quit = 1;
-                    else {
-                        mouse_get(&ms);
-                        cursor_draw(ms.x, ms.y);
-                    }
-                } else if (apple_open) {
-                    cursor_restore();
-                    activate(-1);
+                cursor_restore();
+                if (handle_click_at(ms.x, ms.y))
+                    quit = 1;
+                else {
                     mouse_get(&ms);
                     cursor_draw(ms.x, ms.y);
                 }
             }
-        } else {
-            mouse_clear_edges();
         }
 
         if (keyboard_has_input()) {
             int ch = keyboard_read_char();
-            if (ch == 27 || ch == 'q' || ch == 'Q')
+            if (ch == 27 || ch == 'q' || ch == 'Q') {
                 quit = 1;
-            else if (ch >= '1' && ch <= '4') {
+            } else if (ch == 'w' || ch == 'W') {
+                mouse_nudge(0, -8);
+            } else if (ch == 's' || ch == 'S') {
+                mouse_nudge(0, 8);
+            } else if (ch == 'a' || ch == 'A') {
+                mouse_nudge(-8, 0);
+            } else if (ch == 'd' || ch == 'D') {
+                mouse_nudge(8, 0);
+            } else if (ch == '\n' || ch == ' ') {
+                mouse_get(&ms);
+                cursor_restore();
+                if (handle_click_at(ms.x, ms.y))
+                    quit = 1;
+                else {
+                    mouse_get(&ms);
+                    cursor_draw(ms.x, ms.y);
+                }
+            } else if (ch >= '1' && ch <= '4') {
                 cursor_restore();
                 spawn_app(ch - '1');
                 draw_desktop();
                 mouse_get(&ms);
                 cursor_draw(ms.x, ms.y);
-            } else if (ch == '5')
+            } else if (ch == '5') {
                 quit = 1;
+            }
+
+            if (mouse_moved() && !quit) {
+                mouse_get(&ms);
+                mouse_clear_edges();
+                cursor_draw(ms.x, ms.y);
+            }
         }
 
         if (quit)
             break;
+
         if (!keyboard_has_input() && !mouse_moved())
             __asm__ volatile("hlt");
     }
