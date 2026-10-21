@@ -23,10 +23,9 @@ struct cpu_context {
     uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax, eip;
 };
 
-/* per-process file descriptor */
 struct proc_fd {
     int used;
-    int kind; /* 1=special, 2=file */
+    int kind;
     int special_id;
     int writable;
     char name[PROC_PATH_LEN];
@@ -45,8 +44,6 @@ struct task {
     int exit_code;
     int wait_parent;
     int waiting_on;
-
-    /* process / address-space */
     uint32_t cr3;
     int is_user;
     int parent;
@@ -54,8 +51,6 @@ struct task {
     uint32_t kstack_top;
     uint32_t user_eip;
     uint32_t user_esp;
-
-    /* per-process resources */
     struct proc_fd fds[PROC_MAX_FD];
     uint32_t brk;
     uint32_t brk_mapped;
@@ -70,6 +65,7 @@ void task_exit(void);
 void task_exit_code(int code);
 void schedule(void);
 struct task *task_current(void);
+void task_set_ready(int id);
 void task_on_timer(void);
 int task_needs_resched(void);
 void task_clear_resched(void);

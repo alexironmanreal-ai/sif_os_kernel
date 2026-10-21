@@ -66,7 +66,6 @@ void task_init_stdio(struct task *t) {
     t->fds[2].kind = 1;
     t->fds[2].special_id = 2;
     t->fds[2].writable = 1;
-    /* default; user tasks overwrite with ASLR */
     t->brk = 0x08100000u;
     t->brk_mapped = 0x08100000u;
 }
@@ -173,7 +172,6 @@ int task_create_user(const char *name, uint32_t cr3, uint32_t entry,
     t->user_esp = user_esp;
     t->parent = current_id;
     task_init_stdio(t);
-    /* ASLR heap base */
     uint32_t b = aslr_brk_start();
     t->brk = b;
     t->brk_mapped = b;
@@ -192,6 +190,13 @@ int task_create_user(const char *name, uint32_t cr3, uint32_t entry,
 
 struct task *task_current(void) {
     return (current_id >= 0) ? &tasks[current_id] : 0;
+}
+
+void task_set_ready(int id) {
+    if (id < 0 || id >= MAX_TASKS)
+        return;
+    if (tasks[id].state == TASK_BLOCKED || tasks[id].state == TASK_SLEEPING)
+        tasks[id].state = TASK_READY;
 }
 
 void task_exit_code(int code) {
