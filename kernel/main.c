@@ -8,7 +8,6 @@
 #include "serial.h"
 #include "timer.h"
 #include "keyboard.h"
-#include "mouse.h"
 #include "multiboot.h"
 #include "pmm.h"
 #include "paging.h"
@@ -86,7 +85,7 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
 
     __asm__ volatile("sti");
     printk("[ok] interrupts armed\n");
-    mouse_init();
+    /* mouse_init skipped in console mode — was stealing kbd bytes */
     dev_init();
     net_init();
     wire_init();
@@ -98,14 +97,14 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     }
 
     printk("----------------------------------------\n");
-    printk("  console mode (no GUI)\n");
-    printk("  aid | sec | net | spawn\n");
+    printk("  console — type at SIF> prompt\n");
     printk("----------------------------------------\n");
 
     if (task_create("console", shell_task) < 0)
         panic("no console");
 
     for (;;) {
+        keyboard_poll();
         net_poll();
         schedule();
         __asm__ volatile("sti; hlt");

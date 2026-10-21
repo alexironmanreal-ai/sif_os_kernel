@@ -5,7 +5,8 @@
 #include <stdbool.h>
 
 void keyboard_init(void);
-int  keyboard_read_char(void);
+void keyboard_poll(void);
+int keyboard_read_char(void);
 bool keyboard_has_input(void);
 
 #endif

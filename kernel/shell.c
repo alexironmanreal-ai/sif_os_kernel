@@ -192,15 +192,16 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF console — aid | sec | net | spawn\nSIF> ");
+    printk("SIF console — type here\nSIF> ");
     for (;;) {
+        keyboard_poll();
         net_poll();
         if (task_needs_resched()) {
             task_clear_resched();
             task_yield();
         }
         if (!keyboard_has_input()) {
-            __asm__ volatile("hlt");
+            __asm__ volatile("sti; hlt");
             continue;
         }
         int ch = keyboard_read_char();
@@ -218,6 +219,8 @@ void shell_run(void) {
         if (ch == '\b') {
             if (pos > 0) {
                 pos--;
+                vga_putc('\b');
+                vga_putc(' ');
                 vga_putc('\b');
             }
             continue;
