@@ -1,6 +1,7 @@
 #include "shell.h"
 #include "cmd.h"
 #include "keyboard.h"
+#include "serial.h"
 #include "printk.h"
 #include "task.h"
 #include "pmm.h"
@@ -18,6 +19,20 @@
 #include <stddef.h>
 
 #define LINE_MAX 160
+
+/* unified input: PS/2 keyboard or COM1 serial (Ubuntu terminal) */
+static int console_getchar(void) {
+    keyboard_poll();
+    if (keyboard_has_input())
+        return keyboard_read_char();
+    if (serial_has_input()) {
+        int c = serial_getc();
+        if (c == '\r')
+            c = '\n';
+        return c;
+    }
+    return 0;
+}
 
 static int c_aid(int a, char **v) {
     (void)a;
@@ -139,6 +154,7 @@ static int c_clear(int a, char **v) {
     (void)a;
     (void)v;
     vga_clear();
+    printk("\033[2J\033[H"); /* ANSI clear for serial terminal */
     return 0;
 }
 
@@ -192,7 +208,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF console — type here\nSIF> ");
+    printk("SIF console (serial+kbd) — aid for help\nSIF> ");
     for (;;) {
         keyboard_poll();
         net_poll();
@@ -200,13 +216,11 @@ void shell_run(void) {
             task_clear_resched();
             task_yield();
         }
-        if (!keyboard_has_input()) {
+        int ch = console_getchar();
+        if (!ch) {
             __asm__ volatile("sti; hlt");
             continue;
         }
-        int ch = keyboard_read_char();
-        if (!ch)
-            continue;
         if (ch == '\n' || ch == '\r') {
             buf[pos] = 0;
             printk("\n");
@@ -216,18 +230,16 @@ void shell_run(void) {
             printk("SIF> ");
             continue;
         }
-        if (ch == '\b') {
+        if (ch == 0x7F || ch == '\b') { /* DEL or BS */
             if (pos > 0) {
                 pos--;
-                vga_putc('\b');
-                vga_putc(' ');
-                vga_putc('\b');
+                printk("\b \b");
             }
             continue;
         }
         if (pos < LINE_MAX - 1 && ch >= 32 && ch < 127) {
             buf[pos++] = (char)ch;
-            vga_putc((char)ch);
+            printk("%c", ch); /* echo to serial + vga */
         }
     }
 }

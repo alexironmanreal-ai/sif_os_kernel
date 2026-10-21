@@ -8,6 +8,8 @@
 void serial_init(void);
 void serial_putc(char c);
 void serial_write(const char *s);
-int  serial_ready(void);
+int serial_ready(void);
+int serial_has_input(void);
+int serial_getc(void); /* 0 if empty */
 
 #endif
