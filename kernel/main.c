@@ -29,6 +29,7 @@
 #include "cpu.h"
 #include "smoke.h"
 #include "security.h"
+#include "klog.h"
 
 void panic(const char *msg) {
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_RED);
@@ -43,6 +44,7 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
 
     vga_init();
     serial_init();
+    klog_init();
     multiboot_save(magic, mbi);
 
     vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -85,19 +87,18 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
 
     __asm__ volatile("sti");
     printk("[ok] interrupts armed\n");
-    /* mouse_init skipped in console mode — was stealing kbd bytes */
     dev_init();
     net_init();
     wire_init();
 
     if (smoke_wanted()) {
-        smoke_note("PASS console");
+        smoke_note("PASS 2.8");
         printk("[smoke] PASS\n");
         smoke_exit(0);
     }
 
     printk("----------------------------------------\n");
-    printk("  console — type at SIF> prompt\n");
+    printk("  console — aid | ls | dmesg | spawn\n");
     printk("----------------------------------------\n");
 
     if (task_create("console", shell_task) < 0)

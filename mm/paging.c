@@ -3,21 +3,21 @@
 #include "printk.h"
 #include "string.h"
 #include "kernel_mem.h"
+#include "task.h"
 
 #ifndef PAGE_SIZE
 #define PAGE_SIZE 4096
 #endif
 
 static uint32_t page_directory[1024] __attribute__((aligned(4096)));
-static uint32_t ident_tables[4][1024] __attribute__((aligned(4096))); /* 16 MiB */
-static uint32_t hh_tables[4][1024] __attribute__((aligned(4096)));    /* 16 MiB HH */
+static uint32_t ident_tables[4][1024] __attribute__((aligned(4096)));
+static uint32_t hh_tables[4][1024] __attribute__((aligned(4096)));
 
 static uint32_t *current_pd = page_directory;
 static uint32_t kernel_pd_phys;
 static uint32_t current_pd_phys;
 
 static inline uint32_t virt_to_phys_low(uint32_t v) {
-    /* kernel objects live in HH; identity window is 1:1 */
     if (v >= KERNEL_VMA)
         return V2P(v);
     return v;
@@ -26,7 +26,6 @@ static inline uint32_t virt_to_phys_low(uint32_t v) {
 static inline uint32_t *pd_from_phys(uint32_t phys) {
     if (phys >= KERNEL_VMA)
         return (uint32_t *)phys;
-    /* PD frames allocated from PMM are in identity low region */
     return (uint32_t *)phys;
 }
 
@@ -129,7 +128,6 @@ void paging_init(void) {
     for (int i = 0; i < 1024; i++)
         page_directory[i] = 0;
 
-    /* identity 0-16MiB + HH 0xC0000000-0xC1000000 -> same phys */
     for (int t = 0; t < 4; t++) {
         for (uint32_t i = 0; i < 1024; i++) {
             uint32_t phys = (uint32_t)t * 0x400000u + i * PAGE_SIZE;
@@ -161,14 +159,14 @@ void page_fault_handler(uint32_t err, uint32_t eip) {
     printk("  %s %s %s\n", present ? "protection" : "not-present",
            write ? "write" : "read", user ? "user" : "kernel");
 
-    if (!present && user && cr2 >= USER_BASE && cr2 < USER_TOP) {
-        uint32_t frame = pmm_alloc_frame();
-        if (frame) {
-            uint32_t va = cr2 & ~0xFFFu;
-            paging_map(va, frame, PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
-            memset((void *)va, 0, PAGE_SIZE);
-            return;
-        }
+    /*
+     * Strict policy: do NOT auto-map arbitrary user pages.
+     * Heap grows only via SYS_BRK. Guard page under stack stays unmapped.
+     */
+    if (user) {
+        struct task *t = task_current();
+        if (t && t->is_user)
+            task_exit_code(-11); /* SIGSEGV-ish */
     }
     for (;;)
         __asm__ volatile("cli; hlt");

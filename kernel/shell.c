@@ -9,6 +9,7 @@
 #include "ns.h"
 #include "dev.h"
 #include "net.h"
+#include "fs.h"
 #include "kmalloc.h"
 #include "kernel.h"
 #include "multiboot.h"
@@ -16,11 +17,12 @@
 #include "io.h"
 #include "userland.h"
 #include "security.h"
+#include "klog.h"
+#include "timer.h"
 #include <stddef.h>
 
 #define LINE_MAX 160
 
-/* unified input: PS/2 keyboard or COM1 serial (Ubuntu terminal) */
 static int console_getchar(void) {
     keyboard_poll();
     if (keyboard_has_input())
@@ -37,7 +39,89 @@ static int console_getchar(void) {
 static int c_aid(int a, char **v) {
     (void)a;
     (void)v;
-    printk("sec net arp ping dns http | cells spawn | pulse\n");
+    printk("ls cat touch rm write | spawn pulse vault\n");
+    printk("net arp ping dns http | sec dmesg uptime\n");
+    return 0;
+}
+
+static int c_ls(int a, char **v) {
+    (void)a;
+    (void)v;
+    fs_list();
+    return 0;
+}
+
+static int c_cat(int a, char **v) {
+    if (a < 2) {
+        printk("usage: cat name\n");
+        return -1;
+    }
+    char buf[1024];
+    uint32_t n = 0;
+    if (fs_read(v[1], buf, sizeof(buf) - 1, &n) < 0) {
+        printk("no such file\n");
+        return -1;
+    }
+    buf[n] = 0;
+    printk("%s", buf);
+    if (n && buf[n - 1] != '\n')
+        printk("\n");
+    return 0;
+}
+
+static int c_touch(int a, char **v) {
+    if (a < 2)
+        return -1;
+    if (fs_create(v[1], "", 0) < 0)
+        return -1;
+    printk("ok %s\n", v[1]);
+    return 0;
+}
+
+static int c_rm(int a, char **v) {
+    if (a < 2)
+        return -1;
+    if (fs_delete(v[1]) < 0) {
+        printk("fail\n");
+        return -1;
+    }
+    printk("removed\n");
+    return 0;
+}
+
+static int c_write(int a, char **v) {
+    if (a < 3) {
+        printk("usage: write name text...\n");
+        return -1;
+    }
+    char body[256];
+    int pos = 0;
+    for (int i = 2; i < a && pos < 250; i++) {
+        if (i > 2)
+            body[pos++] = ' ';
+        for (char *p = v[i]; *p && pos < 250; p++)
+            body[pos++] = *p;
+    }
+    body[pos++] = '\n';
+    body[pos] = 0;
+    if (fs_write(v[1], body, (uint32_t)pos) < 0)
+        return -1;
+    printk("wrote %d\n", pos);
+    return 0;
+}
+
+static int c_dmesg(int a, char **v) {
+    (void)a;
+    (void)v;
+    klog_dump(40);
+    return 0;
+}
+
+static int c_uptime(int a, char **v) {
+    (void)a;
+    (void)v;
+    uint32_t s = timer_seconds();
+    printk("up %u s (%u ticks)\n", s, timer_ticks());
     return 0;
 }
 
@@ -122,7 +206,7 @@ static int c_spawn(int a, char **v) {
         return -1;
     const char *key = ns_store_key(v[1]);
     if (!key)
-        return -1;
+        key = v[1];
     char *av[2] = {(char *)key, 0};
     int pid = userland_spawn_file_argv(key, 1, av);
     printk(pid < 0 ? "fail\n" : "id=%d\n", pid);
@@ -154,7 +238,7 @@ static int c_clear(int a, char **v) {
     (void)a;
     (void)v;
     vga_clear();
-    printk("\033[2J\033[H"); /* ANSI clear for serial terminal */
+    printk("\033[2J\033[H");
     return 0;
 }
 
@@ -187,6 +271,13 @@ static int c_reboot(int a, char **v) {
 static void reg(void) {
     cmd_init();
     cmd_register("aid", "help", c_aid);
+    cmd_register("ls", "list", c_ls);
+    cmd_register("cat", "read", c_cat);
+    cmd_register("touch", "create", c_touch);
+    cmd_register("rm", "delete", c_rm);
+    cmd_register("write", "write", c_write);
+    cmd_register("dmesg", "log", c_dmesg);
+    cmd_register("uptime", "up", c_uptime);
     cmd_register("sec", "audit", c_sec);
     cmd_register("net", "iface", c_net);
     cmd_register("arp", "arp", c_arp);
@@ -208,7 +299,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF console (serial+kbd) — aid for help\nSIF> ");
+    printk("SIF 2.8 — aid | ls | spawn | dmesg\nSIF> ");
     for (;;) {
         keyboard_poll();
         net_poll();
@@ -230,7 +321,7 @@ void shell_run(void) {
             printk("SIF> ");
             continue;
         }
-        if (ch == 0x7F || ch == '\b') { /* DEL or BS */
+        if (ch == 0x7F || ch == '\b') {
             if (pos > 0) {
                 pos--;
                 printk("\b \b");
@@ -239,7 +330,7 @@ void shell_run(void) {
         }
         if (pos < LINE_MAX - 1 && ch >= 32 && ch < 127) {
             buf[pos++] = (char)ch;
-            printk("%c", ch); /* echo to serial + vga */
+            printk("%c", ch);
         }
     }
 }

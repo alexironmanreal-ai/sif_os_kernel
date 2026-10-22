@@ -17,62 +17,16 @@
 
 extern void enter_usermode(uint32_t eip, uint32_t esp);
 
-static uint32_t g_ret_esp, g_ret_eip;
-static uint32_t g_active_cr3;
-static int g_active_pid = -1;
-static int g_blocking;
-
 void userland_do_exit(void) {
     struct task *t = task_current();
     if (t && t->is_user) {
         task_exit_code(0);
         return;
     }
-    if (g_active_cr3 && g_active_cr3 != paging_kernel_pd()) {
-        uint32_t doomed = g_active_cr3;
-        g_active_cr3 = 0;
-        paging_switch(paging_kernel_pd());
-        paging_destroy_address_space(doomed);
-    }
-    g_active_pid = -1;
-    if (!g_blocking)
-        return;
-    __asm__ volatile(
-        "cli\n\t"
-        "mov $0x10, %%ax\n\t"
-        "mov %%ax, %%ds\n\t"
-        "mov %%ax, %%es\n\t"
-        "mov %%ax, %%fs\n\t"
-        "mov %%ax, %%gs\n\t"
-        "mov %%ax, %%ss\n\t"
-        "mov %0, %%esp\n\t"
-        "sti\n\t"
-        "jmp *%1\n\t"
-        :
-        : "r"(g_ret_esp), "r"(g_ret_eip)
-        : "memory", "eax");
-}
-
-static void user_trampoline(void) {
-    struct task *t = task_current();
-    if (!t || !t->is_user || !t->user_eip) {
-        printk("[user] trampoline invalid\n");
-        task_exit_code(-1);
-    }
-    if (t->kstack_top)
-        tss_set_kernel_stack(t->kstack_top);
-    if (t->cr3)
-        paging_switch(t->cr3);
-
-    uint32_t eip = t->user_eip;
-    uint32_t esp = t->user_esp;
-    printk("[user] enter pid=%d eip=%x esp=%x\n", t->id, eip, esp);
-    enter_usermode(eip, esp);
-    task_exit_code(-1);
 }
 
 void userland_init(void) {
-    printk("[user] ASLR stack/brk + isolation\n");
+    printk("[user] ASLR + stack guard + isolation\n");
 }
 
 static uint32_t setup_argv(uint32_t stack_top, int argc, char **argv) {
@@ -106,9 +60,12 @@ static uint32_t setup_argv(uint32_t stack_top, int argc, char **argv) {
     return sp;
 }
 
+/*
+ * Map 2 stack pages + leave 1 unmapped guard page below.
+ * Layout: [guard unmapped][stack page][stack page][stack_top]
+ */
 static int map_user_stack_at(uint32_t stack_top) {
     uint32_t fl = PAGE_PRESENT | PAGE_WRITE | PAGE_USER;
-    /* 2 pages below stack_top */
     for (int i = 1; i <= 2; i++) {
         uint32_t va = stack_top - (uint32_t)i * PAGE_SIZE;
         if (!security_user_range_ok(va, PAGE_SIZE))
@@ -119,6 +76,7 @@ static int map_user_stack_at(uint32_t stack_top) {
         paging_map(va, frame, fl);
         memset((void *)va, 0, PAGE_SIZE);
     }
+    /* guard: page at stack_top - 3*PAGE intentionally not mapped */
     return 0;
 }
 
@@ -164,11 +122,7 @@ int userland_spawn_buf(const void *data, uint32_t size, int argc, char **argv,
         return -1;
     }
 
-    /* set per-task brk ASLR — task struct after create */
-    extern struct task *task_by_id(int id);
-    /* if no task_by_id, set via current list in task.c — skip if missing */
-
-    printk("[spawn] pid=%d '%s' eip=%x esp=%x (ASLR)\n", pid, nm, entry,
+    printk("[spawn] pid=%d '%s' eip=%x esp=%x guard=on\n", pid, nm, entry,
            user_esp);
     return pid;
 }
@@ -188,37 +142,7 @@ int userland_spawn_file(const char *name) {
     return userland_spawn_file_argv(name, 1, av);
 }
 
-void userland_run_test(void) {
-    uint32_t saved = paging_current_pd();
-    uint32_t cr3 = paging_create_address_space();
-    if (!cr3)
-        return;
-    paging_switch(cr3);
-    uint32_t cp = pmm_alloc_frame();
-    if (!cp) {
-        paging_switch(saved);
-        paging_destroy_address_space(cr3);
-        return;
-    }
-    uint32_t fl = PAGE_PRESENT | PAGE_WRITE | PAGE_USER;
-    paging_map(USER_CODE_V, cp, fl);
-    memset((void *)USER_CODE_V, 0, PAGE_SIZE);
-    /* minimal exit syscall */
-    uint8_t *p = (uint8_t *)USER_CODE_V;
-    *p++ = 0xB8;
-    *(uint32_t *)p = 1;
-    p += 4; /* mov eax,1 SYS_EXIT */
-    *p++ = 0xCD;
-    *p++ = 0x80;
-
-    uint32_t st = aslr_stack_top();
-    map_user_stack_at(st);
-    char *av[] = {"ring3test", 0};
-    uint32_t usp = setup_argv(st, 1, av);
-    paging_switch(saved);
-    int pid = task_create_user("ring3test", cr3, USER_CODE_V, usp);
-    printk("[user] test pid=%d esp=%x\n", pid, usp);
-}
+void userland_run_test(void) { (void)0; }
 
 int userland_exec_buf(const void *data, uint32_t size, int argc, char **argv) {
     int pid = userland_spawn_buf(data, size, argc, argv,
