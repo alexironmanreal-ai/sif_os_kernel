@@ -3,17 +3,17 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define SFS_MAGIC 0x53494653u /* 'SIFS' */
+#define SFS_MAGIC 0x53494653u
 #define SFS_VERSION 1
 #define SFS_MAX_FILES 32
 #define SFS_NAME_LEN 28
 #define SFS_SECTOR 512
 #define SFS_SUPER_LBA 1
 #define SFS_TABLE_LBA 2
-#define SFS_TABLE_SECTORS 8 /* 8*512 = 4096 >= 32*64 */
+#define SFS_TABLE_SECTORS 8
 #define SFS_DATA_LBA 16
-#define SFS_MAX_FILE_SECTORS 32 /* max 16 KiB per file */
-#define SFS_DATA_BLOCKS 1024    /* ~512 KiB data region */
+#define SFS_MAX_FILE_SECTORS 32
+#define SFS_DATA_BLOCKS 1024
 
 struct sfs_super {
     uint32_t magic;
@@ -21,7 +21,7 @@ struct sfs_super {
     uint32_t max_files;
     uint32_t data_lba;
     uint32_t data_blocks;
-    uint32_t next_free; /* next free data LBA */
+    uint32_t next_free;
     uint8_t pad[512 - 24];
 } __attribute__((packed));
 
@@ -31,7 +31,7 @@ struct sfs_entry {
     uint32_t start_lba;
     uint32_t nsectors;
     uint32_t used;
-} __attribute__((packed)); /* 44 bytes; table uses 64-byte slots */
+} __attribute__((packed));
 
 void diskfs_init(void);
 int diskfs_mounted(void);
@@ -44,5 +44,7 @@ int diskfs_read(const char *name, void *buf, uint32_t max, uint32_t *out_size);
 int diskfs_delete(const char *name);
 int diskfs_list(void);
 int diskfs_exists(const char *name);
+/* copy all disk files into ramfs */
+int diskfs_import_ramfs(void);
 
 #endif

@@ -1,5 +1,6 @@
 #include "diskfs.h"
 #include "ata.h"
+#include "fs.h"
 #include "printk.h"
 #include "string.h"
 
@@ -23,10 +24,6 @@ static int load_super(void) {
 static int save_super(void) {
     uint8_t sec[SFS_SECTOR];
     memset(sec, 0, sizeof(sec));
-    memcpy(sec, &super, sizeof(struct sfs_super) < SFS_SECTOR
-                            ? sizeof(struct sfs_super)
-                            : SFS_SECTOR);
-    /* rewrite fields explicitly for clarity */
     struct sfs_super *s = (struct sfs_super *)sec;
     s->magic = super.magic;
     s->version = super.version;
@@ -41,9 +38,8 @@ static int load_table(void) {
     uint8_t buf[SFS_TABLE_SECTORS * SFS_SECTOR];
     if (ata_read_sectors(SFS_TABLE_LBA, SFS_TABLE_SECTORS, buf) < 0)
         return -1;
-    for (int i = 0; i < SFS_MAX_FILES; i++) {
+    for (int i = 0; i < SFS_MAX_FILES; i++)
         memcpy(&table[i], buf + i * ENTRY_SLOT, sizeof(struct sfs_entry));
-    }
     return 0;
 }
 
@@ -69,6 +65,24 @@ static int free_slot(void) {
     return -1;
 }
 
+int diskfs_import_ramfs(void) {
+    if (!mounted)
+        return -1;
+    int n = 0;
+    uint8_t buf[SFS_MAX_FILE_SECTORS * SFS_SECTOR];
+    for (int i = 0; i < SFS_MAX_FILES; i++) {
+        if (!table[i].used)
+            continue;
+        uint32_t sz = 0;
+        if (diskfs_read(table[i].name, buf, sizeof(buf), &sz) < 0)
+            continue;
+        if (fs_create(table[i].name, buf, sz) == 0)
+            n++;
+    }
+    printk("[sfs] import %d files → ramfs\n", n);
+    return n;
+}
+
 void diskfs_init(void) {
     mounted = 0;
     dirty = 0;
@@ -78,10 +92,11 @@ void diskfs_init(void) {
         printk("[sfs] sin disco — solo ramfs\n");
         return;
     }
-    if (diskfs_mount() == 0)
-        printk("[sfs] montado (%u files max)\n", super.max_files);
-    else
-        printk("[sfs] no formateado — usa 'mkfs'\n");
+    if (diskfs_mount() == 0) {
+        printk("[sfs] montado\n");
+        diskfs_import_ramfs();
+    } else
+        printk("[sfs] no formateado — usa mkfs\n");
 }
 
 int diskfs_mounted(void) { return mounted; }
@@ -98,17 +113,14 @@ int diskfs_format(void) {
     super.data_lba = SFS_DATA_LBA;
     super.data_blocks = SFS_DATA_BLOCKS;
     super.next_free = SFS_DATA_LBA;
-
     memset(table, 0, sizeof(table));
-
     if (save_super() < 0 || save_table() < 0) {
-        printk("[sfs] format write fail\n");
+        printk("[sfs] format fail\n");
         return -1;
     }
     mounted = 1;
     dirty = 0;
-    printk("[sfs] formateado OK (data LBA %u, %u blocks)\n", super.data_lba,
-           super.data_blocks);
+    printk("[sfs] formateado OK\n");
     return 0;
 }
 
@@ -183,6 +195,8 @@ int diskfs_create(const char *name, const void *data, uint32_t size) {
     table[idx].used = 1;
     super.next_free = start + need;
     dirty = 1;
+    /* also mirror to ramfs */
+    fs_create(name, data, size);
     return diskfs_sync();
 }
 
@@ -231,7 +245,6 @@ int diskfs_delete(const char *name) {
     table[idx].name[0] = 0;
     table[idx].size = 0;
     dirty = 1;
-    /* note: space not reclaimed (simple FS); next_free only grows */
     return diskfs_sync();
 }
 
@@ -251,6 +264,6 @@ int diskfs_list(void) {
     }
     if (!n)
         printk("(vacio)\n");
-    printk("next_free LBA=%u\n", super.next_free);
+    printk("next_free LBA=%u dirty=%d\n", super.next_free, dirty);
     return n;
 }
