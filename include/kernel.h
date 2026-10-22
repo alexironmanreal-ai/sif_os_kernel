@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include "kernel_mem.h"
 #define SIF_KERNEL_NAME "SIF Kernel"
-#define SIF_KERNEL_VERSION "2.7.1-console"
+#define SIF_KERNEL_VERSION "2.8.0-core"
 void kernel_main(uint32_t magic, void *mbi);
 void panic(const char *msg);
 #endif

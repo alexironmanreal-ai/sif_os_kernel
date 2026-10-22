@@ -2,11 +2,12 @@
 #include "vga.h"
 #include "serial.h"
 #include "gfx.h"
+#include "klog.h"
 #include <stdarg.h>
 #include <stdint.h>
 
 static void kputc(char c) {
-    /* In mode 13h, VGA text memory is not the display — only use serial */
+    klog_putc(c);
     if (!gfx_is_graphics())
         vga_putc(c);
     serial_putc(c);
