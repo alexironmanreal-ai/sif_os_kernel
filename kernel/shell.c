@@ -10,6 +10,7 @@
 #include "dev.h"
 #include "net.h"
 #include "fs.h"
+#include "diskfs.h"
 #include "kmalloc.h"
 #include "kernel.h"
 #include "multiboot.h"
@@ -39,8 +40,8 @@ static int console_getchar(void) {
 static int c_aid(int a, char **v) {
     (void)a;
     (void)v;
-    printk("ls cat touch rm write | spawn pulse vault\n");
-    printk("net arp ping dns http | sec dmesg uptime\n");
+    printk("ls cat touch rm write | mkfs mount dls dcat dwrite sync\n");
+    printk("spawn pulse | net ping | sec dmesg uptime\n");
     return 0;
 }
 
@@ -52,10 +53,8 @@ static int c_ls(int a, char **v) {
 }
 
 static int c_cat(int a, char **v) {
-    if (a < 2) {
-        printk("usage: cat name\n");
+    if (a < 2)
         return -1;
-    }
     char buf[1024];
     uint32_t n = 0;
     if (fs_read(v[1], buf, sizeof(buf) - 1, &n) < 0) {
@@ -72,26 +71,83 @@ static int c_cat(int a, char **v) {
 static int c_touch(int a, char **v) {
     if (a < 2)
         return -1;
-    if (fs_create(v[1], "", 0) < 0)
-        return -1;
-    printk("ok %s\n", v[1]);
-    return 0;
+    return fs_create(v[1], "", 0);
 }
 
 static int c_rm(int a, char **v) {
     if (a < 2)
         return -1;
-    if (fs_delete(v[1]) < 0) {
-        printk("fail\n");
-        return -1;
-    }
-    printk("removed\n");
-    return 0;
+    return fs_delete(v[1]);
 }
 
 static int c_write(int a, char **v) {
+    if (a < 3)
+        return -1;
+    char body[256];
+    int pos = 0;
+    for (int i = 2; i < a && pos < 250; i++) {
+        if (i > 2)
+            body[pos++] = ' ';
+        for (char *p = v[i]; *p && pos < 250; p++)
+            body[pos++] = *p;
+    }
+    body[pos++] = '\n';
+    return fs_write(v[1], body, (uint32_t)pos);
+}
+
+static int c_mkfs(int a, char **v) {
+    (void)a;
+    (void)v;
+    return diskfs_format();
+}
+
+static int c_mount(int a, char **v) {
+    (void)a;
+    (void)v;
+    if (diskfs_mount() < 0) {
+        printk("mount fail — mkfs?\n");
+        return -1;
+    }
+    diskfs_import_ramfs();
+    printk("mounted\n");
+    return 0;
+}
+
+static int c_sync(int a, char **v) {
+    (void)a;
+    (void)v;
+    return diskfs_sync();
+}
+
+static int c_dls(int a, char **v) {
+    (void)a;
+    (void)v;
+    return diskfs_list();
+}
+
+static int c_dcat(int a, char **v) {
+    if (a < 2)
+        return -1;
+    char buf[1024];
+    uint32_t n = 0;
+    if (diskfs_read(v[1], buf, sizeof(buf) - 1, &n) < 0) {
+        printk("no disk file\n");
+        return -1;
+    }
+    buf[n] = 0;
+    printk("%s", buf);
+    if (n && buf[n - 1] != '\n')
+        printk("\n");
+    return 0;
+}
+
+static int c_dwrite(int a, char **v) {
     if (a < 3) {
-        printk("usage: write name text...\n");
+        printk("usage: dwrite name text...\n");
+        return -1;
+    }
+    if (!diskfs_mounted()) {
+        printk("not mounted — mkfs first\n");
         return -1;
     }
     char body[256];
@@ -103,10 +159,11 @@ static int c_write(int a, char **v) {
             body[pos++] = *p;
     }
     body[pos++] = '\n';
-    body[pos] = 0;
-    if (fs_write(v[1], body, (uint32_t)pos) < 0)
+    if (diskfs_write(v[1], body, (uint32_t)pos) < 0) {
+        printk("dwrite fail\n");
         return -1;
-    printk("wrote %d\n", pos);
+    }
+    printk("disk wrote %d\n", pos);
     return 0;
 }
 
@@ -120,8 +177,7 @@ static int c_dmesg(int a, char **v) {
 static int c_uptime(int a, char **v) {
     (void)a;
     (void)v;
-    uint32_t s = timer_seconds();
-    printk("up %u s (%u ticks)\n", s, timer_ticks());
+    printk("up %u s\n", timer_seconds());
     return 0;
 }
 
@@ -276,6 +332,12 @@ static void reg(void) {
     cmd_register("touch", "create", c_touch);
     cmd_register("rm", "delete", c_rm);
     cmd_register("write", "write", c_write);
+    cmd_register("mkfs", "format", c_mkfs);
+    cmd_register("mount", "mount", c_mount);
+    cmd_register("sync", "sync", c_sync);
+    cmd_register("dls", "diskls", c_dls);
+    cmd_register("dcat", "diskcat", c_dcat);
+    cmd_register("dwrite", "diskw", c_dwrite);
     cmd_register("dmesg", "log", c_dmesg);
     cmd_register("uptime", "up", c_uptime);
     cmd_register("sec", "audit", c_sec);
@@ -299,7 +361,7 @@ void shell_run(void) {
     reg();
     char buf[LINE_MAX];
     int pos = 0;
-    printk("SIF 2.8 — aid | ls | spawn | dmesg\nSIF> ");
+    printk("SIF 2.9 — mkfs | dls | sec | aid\nSIF> ");
     for (;;) {
         keyboard_poll();
         net_poll();
