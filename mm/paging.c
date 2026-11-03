@@ -24,8 +24,6 @@ static inline uint32_t virt_to_phys_low(uint32_t v) {
 }
 
 static inline uint32_t *pd_from_phys(uint32_t phys) {
-    if (phys >= KERNEL_VMA)
-        return (uint32_t *)phys;
     return (uint32_t *)phys;
 }
 
@@ -142,13 +140,16 @@ void paging_init(void) {
             PAGE_WRITE;
     }
 
+    /* Null-pointer trap: unmap VA 0 (and HH mirror of phys 0 stays for kernel) */
+    ident_tables[0][0] = 0;
+
     kernel_pd_phys = virt_to_phys_low((uint32_t)page_directory);
     current_pd = page_directory;
     current_pd_phys = kernel_pd_phys;
 
     __asm__ volatile("mov %0, %%cr3" ::"r"(kernel_pd_phys) : "memory");
 
-    printk("[paging] higher-half VMA=%x identity 0-16MiB\n", KERNEL_VMA);
+    printk("[paging] HH VMA=%x id 0-16MiB null-page OFF\n", KERNEL_VMA);
 }
 
 void page_fault_handler(uint32_t err, uint32_t eip) {
@@ -159,14 +160,10 @@ void page_fault_handler(uint32_t err, uint32_t eip) {
     printk("  %s %s %s\n", present ? "protection" : "not-present",
            write ? "write" : "read", user ? "user" : "kernel");
 
-    /*
-     * Strict policy: do NOT auto-map arbitrary user pages.
-     * Heap grows only via SYS_BRK. Guard page under stack stays unmapped.
-     */
     if (user) {
         struct task *t = task_current();
         if (t && t->is_user)
-            task_exit_code(-11); /* SIGSEGV-ish */
+            task_exit_code(-11);
     }
     for (;;)
         __asm__ volatile("cli; hlt");

@@ -1,20 +1,21 @@
-# Seguridad SIF Kernel v1.14
+# SIF Security
 
-## Implementado
-- **uaccess**: `access_ok`, `copy_from_user`, `copy_to_user`
-- User solo puede tocar `[USER_BASE, USER_TOP)` (0x08000000–0x09000000)
-- Syscalls copian buffers a kernel antes de usarlos
-- Paths: sin `/`, sin `..`, sin control chars, longitud limitada
-- I/O max 4 KiB por syscall
-- `sleep` max 60s
-- `kill` no puede matar pid <= 0 (idle)
-- FD tables por proceso; stdin/out/err no se cierran
-- Syscalls desconocidas → -1
+## Controles activos (3.0)
 
-## No es (aun)
-- ASLR, SMEP/SMAP, stack canaries completos
-- Usuarios/permisos multiuser
-- Cifrado de disco
-- Seccomp-like filtros finos
+1. **Ring separation** — GDT ring0/ring3 + TSS kernel stack
+2. **Syscall gate** — `int 0x80` DPL=3; copy_from/to_user
+3. **User VA window** — solo `[USER_BASE, USER_TOP)`
+4. **path_ok** — rechaza `..` y rutas absolutas en open
+5. **Stack canary** — `__stack_chk_guard` + fail → panic
+6. **ASLR** — stack top y brk por proceso
+7. **Stack guard page** — página sin mapear bajo el stack user
+8. **Strict page fault** — user PF mata el task; no demand-paging libre
+9. **Null page** — VA 0 no mapeada en identity map
+10. **SMEP/SMAP** — CR4 si CPUID lo anuncia
 
-Hobby OS: frontera ring3 + validacion de punteros, no fortaleza militar.
+## Limitaciones conocidas
+
+- **NX** requiere PAE en 32-bit; aún no activado en tablas
+- ELF carga en VA fija (no PIE)
+- Sin KASLR del kernel image
+- Disco SFS no reclama bloques al borrar

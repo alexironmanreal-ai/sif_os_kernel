@@ -92,13 +92,13 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     wire_init();
 
     if (smoke_wanted()) {
-        smoke_note("PASS 2.8");
+        smoke_note("PASS 3.0");
         printk("[smoke] PASS\n");
         smoke_exit(0);
     }
 
     printk("----------------------------------------\n");
-    printk("  console — aid | ls | dmesg | spawn\n");
+    printk("  SIF 3.0 console — type 'help'\n");
     printk("----------------------------------------\n");
 
     if (task_create("console", shell_task) < 0)
