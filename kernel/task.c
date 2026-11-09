@@ -15,9 +15,7 @@ static int current_id = -1;
 static int task_count = 0;
 static int need_resched = 0;
 static int quantum_left = 0;
-#define QUANTUM 5
-
-static void user_trampoline(void);
+#define QUANTUM 4
 
 static void idle_task(void) {
     for (;;) {
@@ -53,6 +51,7 @@ void task_init_stdio(struct task *t) {
         t->fds[i].kind = 0;
         t->fds[i].special_id = 0;
         t->fds[i].writable = 0;
+        t->fds[i].on_disk = 0;
     }
     t->fds[0].used = 1;
     t->fds[0].kind = 1;
@@ -77,6 +76,7 @@ void task_close_all_fds(struct task *t) {
         t->fds[i].used = 0;
         t->fds[i].name[0] = 0;
         t->fds[i].offset = 0;
+        t->fds[i].on_disk = 0;
     }
 }
 
@@ -111,7 +111,18 @@ void task_init(void) {
     quantum_left = QUANTUM;
     task_count = 0;
     task_create("idle", idle_task);
-    printk("[task] scheduler + async user tasks\n");
+    printk("[task] preemptive scheduler (q=%d) max=%d\n", QUANTUM, MAX_TASKS);
+}
+
+int task_count_live(void) {
+    int n = 0;
+    for (int i = 0; i < MAX_TASKS; i++) {
+        if (tasks[i].state == TASK_READY || tasks[i].state == TASK_RUNNING ||
+            tasks[i].state == TASK_BLOCKED || tasks[i].state == TASK_SLEEPING ||
+            tasks[i].state == TASK_ZOMBIE)
+            n++;
+    }
+    return n;
 }
 
 int task_create(const char *name, void (*entry)(void)) {
@@ -233,18 +244,18 @@ void task_exit(void) { task_exit_code(0); }
 
 void task_sleep_ms(uint32_t ms) {
     if (current_id < 0) {
-        uint32_t ticks = ms / 10;
-        if (!ticks)
-            ticks = 1;
+        uint32_t tks = ms / 10;
+        if (!tks)
+            tks = 1;
         uint32_t start = timer_ticks();
-        while (timer_ticks() - start < ticks)
+        while (timer_ticks() - start < tks)
             __asm__ volatile("hlt");
         return;
     }
-    uint32_t ticks = ms / 10;
-    if (!ticks)
-        ticks = 1;
-    tasks[current_id].wake_tick = timer_ticks() + ticks;
+    uint32_t tks = ms / 10;
+    if (!tks)
+        tks = 1;
+    tasks[current_id].wake_tick = timer_ticks() + tks;
     tasks[current_id].state = TASK_SLEEPING;
     schedule();
 }
@@ -417,13 +428,26 @@ void task_list(void) {
             continue;
         const char *st = "?";
         switch (tasks[i].state) {
-        case TASK_READY: st = "READY   "; break;
-        case TASK_RUNNING: st = "RUNNING "; break;
-        case TASK_BLOCKED: st = "BLOCKED "; break;
-        case TASK_SLEEPING: st = "SLEEPING"; break;
-        case TASK_ZOMBIE: st = "ZOMBIE  "; break;
-        case TASK_DEAD: st = "DEAD    "; break;
-        default: break;
+        case TASK_READY:
+            st = "READY   ";
+            break;
+        case TASK_RUNNING:
+            st = "RUNNING ";
+            break;
+        case TASK_BLOCKED:
+            st = "BLOCKED ";
+            break;
+        case TASK_SLEEPING:
+            st = "SLEEPING";
+            break;
+        case TASK_ZOMBIE:
+            st = "ZOMBIE  ";
+            break;
+        case TASK_DEAD:
+            st = "DEAD    ";
+            break;
+        default:
+            break;
         }
         printk("%2d %s %5u %08x %c %08x %s\n", i, st, tasks[i].ticks_ran,
                tasks[i].cr3, tasks[i].is_user ? 'U' : 'K', tasks[i].brk,
