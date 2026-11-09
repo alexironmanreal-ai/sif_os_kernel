@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define MAX_TASKS 16
+#define MAX_TASKS 32
 #define TASK_STACK_SIZE 4096
 #define TASK_KSTACK_SIZE 8192
 #define PROC_MAX_FD 16
@@ -30,6 +30,7 @@ struct proc_fd {
     int writable;
     char name[PROC_PATH_LEN];
     uint32_t offset;
+    int on_disk; /* 1 = SFS, 0 = ramfs */
 };
 
 struct task {
@@ -77,5 +78,6 @@ int task_get_exit(int pid);
 void task_switch_address_space(struct task *t);
 void task_init_stdio(struct task *t);
 void task_close_all_fds(struct task *t);
+int task_count_live(void);
 
 #endif

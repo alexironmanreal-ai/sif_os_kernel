@@ -1,24 +1,26 @@
 # SIF Roadmap
 
-## Hecho (3.0)
-- [x] Boot Multiboot + consola serial/VGA
-- [x] GDT/IDT/PIC/PIT/teclado
+Ver también `docs/STATUS.md` (métricas honestas).
+
+## Hecho
+- [x] Boot Multiboot + consola
+- [x] GDT/IDT/PIC/PIT/kbd/serial
 - [x] Paging + PMM + kmalloc
-- [x] Scheduler + userland ELF + syscalls
-- [x] Ramfs + SFS disco (mkfs/mount)
-- [x] Red NE2000 + ICMP/DNS/HTTP toy
-- [x] SMEP/SMAP, canary, ASLR, null-page
-- [x] Historial de comandos
+- [x] Scheduler + user ELF + syscalls
+- [x] Ramfs + SFS + VFS unificado
+- [x] Red NE2000 toy stack
+- [x] SMEP/SMAP, canary, ASLR stack/brk, null page
+- [x] Preemption: timer → task_on_timer (3.1)
 
-## Próximo
-- [ ] PAE + bit NX en PTEs
-- [ ] ELF PIE (ASLR de código)
-- [ ] Preemption real en kernel paths largos
-- [ ] TCP más robusto / múltiples sockets
-- [ ] VFS unificado ramfs+diskfs
-- [ ] GUI opcional (modo gráfico separado)
+## Siguiente (prioridad)
+- [ ] PAE + NX en PTEs
+- [ ] ELF PIE
+- [ ] stat/mmap/pipe syscalls
+- [ ] TCP con estado mínimo robusto
+- [ ] Stress tests + smoke ampliado
 
-## Largo plazo
+## Luego
+- [ ] Virtio / mejor block layer
 - [ ] SMP
-- [ ] 64-bit kernel path completo
-- [ ] Drivers virtio
+- [ ] 64-bit kernel path real
+- [ ] GUI opcional
