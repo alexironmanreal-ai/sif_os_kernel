@@ -31,6 +31,9 @@
 #include "security.h"
 #include "klog.h"
 
+/* Defined in security.c — set ASAP for -fstack-protector */
+extern uintptr_t __stack_chk_guard;
+
 void panic(const char *msg) {
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_RED);
     printk("\n*** KERNEL PANIC: %s ***\n", msg);
@@ -40,6 +43,9 @@ void panic(const char *msg) {
 }
 
 void kernel_main(uint32_t magic, void *mbi_ptr) {
+    /* Canary before any protected function runs deep */
+    __stack_chk_guard = 0xA5A5C0DEu ^ (uint32_t)(uintptr_t)&magic;
+
     struct multiboot_info *mbi = (struct multiboot_info *)mbi_ptr;
 
     vga_init();
@@ -92,13 +98,13 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     wire_init();
 
     if (smoke_wanted()) {
-        smoke_note("PASS 3.0");
+        smoke_note("PASS 3.1.1");
         printk("[smoke] PASS\n");
         smoke_exit(0);
     }
 
     printk("----------------------------------------\n");
-    printk("  SIF 3.0 console — type 'help'\n");
+    printk("  SIF console — type 'help'\n");
     printk("----------------------------------------\n");
 
     if (task_create("console", shell_task) < 0)
@@ -107,6 +113,10 @@ void kernel_main(uint32_t magic, void *mbi_ptr) {
     for (;;) {
         keyboard_poll();
         net_poll();
+        if (task_needs_resched()) {
+            task_clear_resched();
+            schedule();
+        }
         schedule();
         __asm__ volatile("sti; hlt");
     }

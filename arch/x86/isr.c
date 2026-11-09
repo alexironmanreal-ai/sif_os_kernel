@@ -2,34 +2,58 @@
 #include "idt.h"
 #include "printk.h"
 #include "vga.h"
+#include "paging.h"
 
-extern void isr0(void);  extern void isr1(void);
-extern void isr2(void);  extern void isr3(void);
-extern void isr4(void);  extern void isr5(void);
-extern void isr6(void);  extern void isr7(void);
-extern void isr8(void);  extern void isr9(void);
-extern void isr10(void); extern void isr11(void);
-extern void isr12(void); extern void isr13(void);
-extern void isr14(void); extern void isr15(void);
-extern void isr16(void); extern void isr17(void);
-extern void isr18(void); extern void isr19(void);
-extern void isr20(void); extern void isr21(void);
-extern void isr22(void); extern void isr23(void);
-extern void isr24(void); extern void isr25(void);
-extern void isr26(void); extern void isr27(void);
-extern void isr28(void); extern void isr29(void);
-extern void isr30(void); extern void isr31(void);
+extern void isr0(void);
+extern void isr1(void);
+extern void isr2(void);
+extern void isr3(void);
+extern void isr4(void);
+extern void isr5(void);
+extern void isr6(void);
+extern void isr7(void);
+extern void isr8(void);
+extern void isr9(void);
+extern void isr10(void);
+extern void isr11(void);
+extern void isr12(void);
+extern void isr13(void);
+extern void isr14(void);
+extern void isr15(void);
+extern void isr16(void);
+extern void isr17(void);
+extern void isr18(void);
+extern void isr19(void);
+extern void isr20(void);
+extern void isr21(void);
+extern void isr22(void);
+extern void isr23(void);
+extern void isr24(void);
+extern void isr25(void);
+extern void isr26(void);
+extern void isr27(void);
+extern void isr28(void);
+extern void isr29(void);
+extern void isr30(void);
+extern void isr31(void);
 
 static const char *exception_messages[] = {
-    "Division By Zero", "Debug", "NMI", "Breakpoint", "Overflow",
-    "Bound Range", "Invalid Opcode", "Device Not Available",
-    "Double Fault", "Coprocessor Segment", "Invalid TSS",
-    "Segment Not Present", "Stack Fault", "General Protection",
-    "Page Fault", "Reserved", "x87 FPU", "Alignment Check",
-    "Machine Check", "SIMD FP", "Virtualization", "Control Protection",
-    "Reserved", "Reserved", "Reserved", "Reserved", "Reserved",
-    "Reserved", "Reserved", "Reserved", "Reserved", "Reserved"
-};
+    "Division By Zero",    "Debug",
+    "NMI",                 "Breakpoint",
+    "Overflow",            "Bound Range",
+    "Invalid Opcode",      "Device Not Available",
+    "Double Fault",        "Coprocessor Segment",
+    "Invalid TSS",         "Segment Not Present",
+    "Stack Fault",         "General Protection",
+    "Page Fault",          "Reserved",
+    "x87 FPU",             "Alignment Check",
+    "Machine Check",       "SIMD FP",
+    "Virtualization",      "Control Protection",
+    "Reserved",            "Reserved",
+    "Reserved",            "Reserved",
+    "Reserved",            "Reserved",
+    "Reserved",            "Reserved",
+    "Reserved",            "Reserved"};
 
 void isr_install(void) {
     idt_set_gate(0, (uint32_t)isr0, 0x08, 0x8E);
@@ -64,19 +88,22 @@ void isr_install(void) {
     idt_set_gate(29, (uint32_t)isr29, 0x08, 0x8E);
     idt_set_gate(30, (uint32_t)isr30, 0x08, 0x8E);
     idt_set_gate(31, (uint32_t)isr31, 0x08, 0x8E);
-    printk("[isr] excepciones 0-31 instaladas\n");
+    printk("[isr] excepciones 0-31\n");
 }
 
 void fault_handler(struct regs *r) {
     uint32_t n = r->int_no;
+
+    /* Page fault: dedicated path (may kill user task and return) */
+    if (n == 14) {
+        page_fault_handler(r->err_code, r->eip);
+        return;
+    }
+
     const char *msg = (n < 32) ? exception_messages[n] : "Unknown";
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_RED);
     printk("\n*** EXCEPTION: %s (%u) ***\n", msg, n);
-    printk("err=%x eip=%x cs=%x eflags=%x\n", r->err_code, r->eip, r->cs, r->eflags);
-    if (n == 14) {
-        uint32_t cr2;
-        __asm__ volatile ("mov %%cr2, %0" : "=r"(cr2));
-        printk("page fault CR2=%x\n", cr2);
-    }
-    for (;;) { __asm__ volatile ("cli; hlt"); }
+    printk("err=%x eip=%x\n", r->err_code, r->eip);
+    for (;;)
+        __asm__ volatile("cli; hlt");
 }

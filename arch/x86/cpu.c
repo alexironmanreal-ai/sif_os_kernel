@@ -70,7 +70,7 @@ int cpu_has_nx(void) {
     if (a < 0x80000001u)
         return 0;
     cpuid(0x80000001u, &a, &b, &c, &d);
-    return (d & (1u << 20)) != 0; /* NX */
+    return (d & (1u << 20)) != 0;
 }
 
 int cpu_has_smep(void) {
@@ -78,7 +78,7 @@ int cpu_has_smep(void) {
     if (!cpu_has_cpuid())
         return 0;
     cpuid(7, &a, &b, &c, &d);
-    return (b & (1u << 7)) != 0; /* SMEP */
+    return (b & (1u << 7)) != 0;
 }
 
 int cpu_has_smap(void) {
@@ -86,7 +86,7 @@ int cpu_has_smap(void) {
     if (!cpu_has_cpuid())
         return 0;
     cpuid(7, &a, &b, &c, &d);
-    return (b & (1u << 20)) != 0; /* SMAP */
+    return (b & (1u << 20)) != 0;
 }
 
 int cpu_smep_enabled(void) { return smep_on; }
@@ -98,35 +98,21 @@ void cpu_enable_smep_smap(void) {
     uint32_t cr4;
     __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
 
+    /* SMEP only for now — SMAP needs careful uaccess STAC/CLAC */
     if (cpu_has_smep()) {
-        cr4 |= (1u << 20); /* CR4.SMEP */
+        cr4 |= (1u << 20);
         smep_on = 1;
     }
-    if (cpu_has_smap()) {
-        cr4 |= (1u << 21); /* CR4.SMAP */
-        smap_on = 1;
-    }
+    /* SMAP deliberately off until copy_* uses STAC/CLAC */
 
     __asm__ volatile("mov %0, %%cr4" ::"r"(cr4) : "memory");
-
-    if (smep_on || smap_on)
-        printk("[cpu] CR4 SMEP=%d SMAP=%d\n", smep_on, smap_on);
-    else
-        printk("[cpu] SMEP/SMAP no soportado en este CPU\n");
-
-    /* NX on 32-bit non-PAE page tables is not enforceable here */
-    if (cpu_has_nx())
-        printk("[cpu] NX capable (needs PAE page tables to enforce)\n");
+    printk("[cpu] SMEP=%d SMAP=0 (deferred)\n", smep_on);
 }
 
 void cpu_report(void) {
     char vend[13];
     cpu_vendor(vend);
     printk("cpu vendor: %s\n", vend[0] ? vend : "?");
-    printk("  cpuid: %s\n", cpu_has_cpuid() ? "yes" : "no");
-    printk("  PAE:   %s\n", cpu_has_pae() ? "yes" : "no");
-    printk("  NX:    %s\n", cpu_has_nx() ? "yes" : "no");
-    printk("  LM64:  %s\n", cpu_has_long_mode() ? "yes" : "no");
-    printk("  SMEP:  %s (on=%d)\n", cpu_has_smep() ? "yes" : "no", smep_on);
-    printk("  SMAP:  %s (on=%d)\n", cpu_has_smap() ? "yes" : "no", smap_on);
+    printk("  PAE=%d NX=%d LM=%d SMEP=%d/%d\n", cpu_has_pae(), cpu_has_nx(),
+           cpu_has_long_mode(), cpu_has_smep(), smep_on);
 }
